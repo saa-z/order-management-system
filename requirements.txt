@@ -1,7 +1,15 @@
+# Server & API
 fastapi
 uvicorn[standard]
 sqlalchemy
 pydantic
-python-escpos
+
+# Communication & Client
 httpx
+
+# Graphical Interface
+PySide6
+
+# Hardware & Tests
+python-escpos
 pytest

@@ -9,8 +9,8 @@ import services
 
 # Define router with its prefix and documentation tag
 router = APIRouter(
-    prefix="/commandes",
-    tags=["Commandes"]
+    prefix="/orders",  # Le préfixe est passé de /commandes à /orders
+    tags=["Orders"]    # Tag mis à jour pour la documentation
 )
 
 
@@ -155,3 +155,8 @@ def cancel_order(commande_id: int, db: Session = Depends(get_db)):
     db.delete(db_commande)
     db.commit()
     return None
+
+@router.get("/last", response_model=Optional[schemas.Commande])
+def get_last_order(db: Session = Depends(get_db)):
+    last_order = db.query(models.Commande).order_by(models.Commande.id.desc()).first()
+    return last_order

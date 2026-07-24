@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Union
 
 # ==========================================
 # 1. ITEMS
@@ -12,6 +12,7 @@ class ItemBase(BaseModel):
     disponible: bool = True
     quantite_en_stock: Optional[int] = None
     categorie_id: int
+    options: Optional[Union[List[str], Dict[str, int]]] = None
     last_modified: Optional[datetime] = None
 
 class ItemCreate(ItemBase):
@@ -22,6 +23,7 @@ class ItemUpdate(BaseModel):
     prix: Optional[float] = None
     disponible: Optional[bool] = None
     quantite_en_stock: Optional[int] = None
+    options: Optional[Union[List[str], Dict[str, int]]] = None
     categorie_id: Optional[int] = None
     last_modified: Optional[datetime] = None
 
@@ -38,6 +40,7 @@ class CommandeItemBase(BaseModel):
     item_id: int
     quantite: int = 1
     commentaire: Optional[str] = None
+    option_selectionnee: Optional[str] = None
 
 class CommandeItemCreate(CommandeItemBase):
     pass
@@ -99,3 +102,6 @@ class Commande(CommandeBase):
     items: List[CommandeItem] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+Commande.model_rebuild()
+CommandeItem.model_rebuild()

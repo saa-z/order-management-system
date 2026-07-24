@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -25,6 +25,7 @@ class Item(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String, index=True, nullable=False)
+    options = Column(JSON, nullable=True)
     prix = Column(Float, nullable=False)
     disponible = Column(Boolean, default=True)
     quantite_en_stock = Column(Integer, nullable=True)
@@ -60,7 +61,7 @@ class CommandeItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     commande_id = Column(Integer, ForeignKey("commandes.id", ondelete="CASCADE"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id", ondelete="RESTRICT"), nullable=False)  # RESTRICT empêche de supprimer un produit du menu s'il est présent dans une commande en cours
-
+    option_selectionnee = Column(String, nullable=True)
     quantite = Column(Integer, default=1, nullable=False)
     commentaire = Column(String, nullable=True)  # Ex: "Sans oignons", "Sauce piquante à part"
 

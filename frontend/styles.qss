@@ -1,0 +1,58 @@
+/* --- Global Theme --- */
+QMainWindow {
+    background-color: #1A1714;
+}
+
+QWidget {
+    background-color: #1A1714;
+    color: #F5F1E6; /* Cream / Off-White */
+    font-family: "Georgia", serif; /* Classic Serif for the restaurant feel */
+}
+
+/* --- Labels --- */
+QLabel {
+    color: #F5F1E6;
+    font-size: 16px;
+    padding: 5px;
+}
+
+/* --- List Widget --- */
+QListWidget {
+    background-color: #2D2824; /* A slightly lighter shade for contrast */
+    color: #F5F1E6;
+    border: 1px solid #B88647; /* Bronze border */
+    border-radius: 5px;
+    font-size: 14px;
+}
+
+/* --- Standard Buttons (Accent 1 - Ocre/Bronze) --- */
+QPushButton {
+    background-color: #B88647;
+    color: #F5F1E6;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #D4A365; /* Lighter version on hover */
+}
+
+QPushButton:pressed {
+    background-color: #9A7039; /* Darker version on click */
+}
+
+/* --- Critical Actions (Accent 2 - Rouge Brique/Bordeaux) --- */
+/* You will assign this ID to your "Checkout" button */
+QPushButton#checkout_button {
+    background-color: #9C2A24;
+}
+
+QPushButton#checkout_button:hover {
+    background-color: #B83A34;
+}
+
+QPushButton#checkout_button:pressed {
+    background-color: #7D211C;
+}
