@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QLabel, QMessageBox,
-                               QHeaderView, QInputDialog, QComboBox)
+                               QHeaderView, QInputDialog, QComboBox, QDialog)
 from PySide6.QtCore import Qt
+from views.order_type_dialog import OrderTypeDialog  # Import mis à jour avec le bon nom de fichier
 
 
 class PosOrderPage(QWidget):
@@ -11,10 +12,34 @@ class PosOrderPage(QWidget):
         self.api = api_client
         self.categories_data = {}
         self.cart_total = 0.0
-        self.current_order_id = 1  # Default ID
+
+        # Attributs de commande (SQLAlchemy)
+        self.order_type = "eat in"
+        self.table_number = None
 
         self.init_ui()
         self.refresh_data()
+
+    def showEvent(self, event):
+        """Déclenché automatiquement chaque fois que la vue devient visible."""
+        super().showEvent(event)
+        self.setup_new_order()
+
+    def setup_new_order(self):
+        """Affiche la Pop-up pour paramétrer la nouvelle commande."""
+        dialog = OrderTypeDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            self.order_type = dialog.order_type
+            self.table_number = dialog.table_number
+
+            # Mise à jour de l'affichage du mode sélectionné
+            info_text = f"Mode : {self.order_type.upper()}"
+            if self.table_number:
+                info_text += f" | Table : {self.table_number}"
+            self.order_info_label.setText(info_text)
+        else:
+            # Si annulation, retour au menu principal
+            self.main_window.go_to("MENU")
 
     def init_ui(self):
         """UI Construction."""
@@ -51,27 +76,28 @@ class PosOrderPage(QWidget):
         # --- RIGHT PANEL (50%): Cart ---
         right_panel = QVBoxLayout()
 
-        # Order ID label
-        self.order_id_label = QLabel(f"Commande N° : {self.current_order_id}")
-        self.order_id_label.setStyleSheet("font-size: 14px; color: #555; font-style: italic; margin-bottom: 5px;")
+        right_panel.addWidget(QLabel("Panier"))
+
+        # Label d'informations de commande (Table / Type)
+        self.order_info_label = QLabel("Mode : Non défini")
+        self.order_info_label.setStyleSheet("font-weight: bold; color: #2c3e50; font-size: 14px;")
+        right_panel.addWidget(self.order_info_label)
 
         self.cart_list = QTableWidget(0, 3)
         self.cart_list.setHorizontalHeaderLabels(["Article", "Qté", "Prix"])
         self.cart_list.setShowGrid(False)
 
-        # Column configuration to occupy space
+        # Configuration des colonnes
         self.cart_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.cart_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.cart_list.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
 
-        # Double-click to comment
+        # Double-clic pour éditer les commentaires
         self.cart_list.itemDoubleClicked.connect(self.edit_row_comment)
 
         self.cart_total_label = QLabel("Total: 0.00 €")
         self.cart_total_label.setStyleSheet("font-weight: bold; font-size: 20px;")
 
-        right_panel.addWidget(QLabel("Panier"))
-        right_panel.addWidget(self.order_id_label)  # Add ID here
         right_panel.addWidget(self.cart_list)
         right_panel.addWidget(self.cart_total_label)
 
@@ -79,122 +105,89 @@ class PosOrderPage(QWidget):
         right_panel.addWidget(QPushButton("Facturer"))
         right_panel.addWidget(QPushButton("Annuler"))
 
-        # Final layout assembly
+        # Assemblage final des layouts
         content_layout.addLayout(left_panel, stretch=1)
         content_layout.addLayout(right_panel, stretch=1)
         main_layout.addLayout(content_layout)
 
-    def fetch_last_order_id(self):
-        """Fetches the last order ID via the API to compute the next one."""
-        try:
-            # API call to get the last ID
-            last_id = self.api.get_last_order_id()
-            if last_id:
-                self.current_order_id = int(last_id) + 1
-            else:
-                self.current_order_id = 1
-        except Exception:
-            # If API error, fall back to 1
-            self.current_order_id = 1
-
-        # Text update
-        self.order_id_label.setText(f"Commande N° : {self.current_order_id}")
-
     def refresh_data(self):
         try:
-            # 1. Load categories
+            # Chargement des catégories depuis l'API
             categories_list = self.api.get_categories()
             self.categories_data = {cat['nom']: cat['items'] for cat in categories_list}
             self.load_categories()
-
-            # 2. Load last ID
-            self.fetch_last_order_id()
 
         except Exception as e:
             QMessageBox.critical(self, "API Error", f"Could not load data: {e}")
 
     def add_to_cart(self, row, column):
-        """Adds the item to the cart with option selection if available."""
-        # 1. Fetch raw data from the clicked item
+        """Ajoute l'article sélectionné au panier."""
         item_data = self.items_table.item(row, 0).data(Qt.UserRole).copy()
         item_data['commentaire'] = None
-
-        # Initialize the selected option field
         item_data['option_selectionnee'] = None
 
-        # 2. Check if the item has options available (e.g., ["Coca", "Orangina"])
         options = item_data.get('options')
         liste_options = []
 
         if options:
             if isinstance(options, dict):
-                # On extrait les parfums qui ont encore du stock (> 0)
                 liste_options = [nom for nom, stock in options.items() if stock > 0]
             elif isinstance(options, list):
                 liste_options = options
 
         if liste_options:
-            # Open input dialog with a dropdown list
             option_choisie, ok = QInputDialog.getItem(
                 self,
                 "Sélectionner une option",
                 f"Quel parfum pour '{item_data['nom']}' ?",
-                liste_options,  # On passe la liste nettoyée ici
+                liste_options,
                 0,
                 False
             )
 
-            # If user cancels or closes the dialog, abort adding to cart
             if not ok:
                 return
 
-            # Save selected option inside item data dictionary
             item_data['option_selectionnee'] = option_choisie
-        # 3. Insert row into cart
+
         cart_row = self.cart_list.rowCount()
         self.cart_list.insertRow(cart_row)
 
-        # Col 0: Article Name (append option if selected)
         display_name = item_data['nom']
         if item_data['option_selectionnee']:
             display_name = f"{item_data['nom']} : {item_data['option_selectionnee']}"
 
         name_item = QTableWidgetItem(display_name)
-        name_item.setData(Qt.UserRole, item_data)  # Store complete item_data dictionary inside
+        name_item.setData(Qt.UserRole, item_data)
         self.cart_list.setItem(cart_row, 0, name_item)
 
-        # Col 1: Quantity (ComboBox)
         combo = QComboBox()
-        combo.addItems([str(i) for i in range(1, 21)])  # From 1 to 20
+        combo.addItems([str(i) for i in range(1, 21)])
         combo.currentIndexChanged.connect(self.update_total)
         self.cart_list.setCellWidget(cart_row, 1, combo)
 
-        # Col 2: Unit Price
         self.cart_list.setItem(cart_row, 2, QTableWidgetItem(f"{item_data['prix']:.2f}"))
 
         self.update_total()
 
     def update_total(self):
-        """Recalculates total based on quantities."""
+        """Recalcule le total de la commande."""
         new_total = 0.0
         for row in range(self.cart_list.rowCount()):
-            # Fetch price
             price_item = self.cart_list.item(row, 2)
             if price_item:
                 price = float(price_item.text())
-
-                # Fetch quantity from ComboBox
                 combo = self.cart_list.cellWidget(row, 1)
                 qty = int(combo.currentText()) if combo else 1
-
                 new_total += (price * qty)
 
         self.cart_total = new_total
         self.cart_total_label.setText(f"Total: {self.cart_total:.2f} €")
 
     def edit_row_comment(self, item):
-        """Modifies row comment."""
-        if item.tableWidget() != self.cart_list: return
+        """Edite le commentaire d'une ligne du panier."""
+        if item.tableWidget() != self.cart_list:
+            return
 
         row = item.row()
         item_widget = self.cart_list.item(row, 0)
