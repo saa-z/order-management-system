@@ -1,54 +1,65 @@
 from datetime import datetime
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict, Union
+
+from models import OrderStatus, OrderType, SeatingLocation
+
 
 # ==========================================
 # 1. ITEMS
 # ==========================================
 
 class ItemBase(BaseModel):
-    nom: str
-    prix: float
-    disponible: bool = True
-    quantite_en_stock: Optional[int] = None
-    categorie_id: int
+    name: str
+    price: Decimal
+    available: bool = True
+    stock_quantity: Optional[int] = None
+    category_id: int
     options: Optional[Union[List[str], Dict[str, int]]] = None
     last_modified: Optional[datetime] = None
+
 
 class ItemCreate(ItemBase):
     pass
 
+
 class ItemUpdate(BaseModel):
-    nom: Optional[str] = None
-    prix: Optional[float] = None
-    disponible: Optional[bool] = None
-    quantite_en_stock: Optional[int] = None
+    name: Optional[str] = None
+    price: Optional[Decimal] = None
+    available: Optional[bool] = None
+    stock_quantity: Optional[int] = None
     options: Optional[Union[List[str], Dict[str, int]]] = None
-    categorie_id: Optional[int] = None
+    category_id: Optional[int] = None
     last_modified: Optional[datetime] = None
 
-class Item(ItemBase):
+
+class ItemRead(ItemBase):
     id: int
+    is_in_stock: bool = True
     model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
-# 2. COMMANDE ITEMS (Lignes de commande)
+# 2. ORDER ITEMS
 # ==========================================
 
-class CommandeItemBase(BaseModel):
+class OrderItemBase(BaseModel):
     item_id: int
-    quantite: int = 1
-    commentaire: Optional[str] = None
-    option_selectionnee: Optional[str] = None
+    quantity: int = 1
+    comment: Optional[str] = None
+    selected_options: Optional[Dict[str, int]] = None
 
-class CommandeItemCreate(CommandeItemBase):
+
+class OrderItemCreate(OrderItemBase):
     pass
 
-class CommandeItem(CommandeItemBase):
+
+class OrderItemRead(OrderItemBase):
     id: int
-    commande_id: int
-    item: Item  # Utilisé pour retourner les détails de l'item dans la commande
+    order_id: int
+    unit_price: Decimal = Decimal("0.00")
+    item: ItemRead
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,51 +68,67 @@ class CommandeItem(CommandeItemBase):
 # 3. CATEGORIES
 # ==========================================
 
-class CategorieBase(BaseModel):
-    nom: str
-    disponible: bool = True
+class CategoryBase(BaseModel):
+    name: str
 
-class CategorieCreate(CategorieBase):
+
+class CategoryCreate(CategoryBase):
     pass
 
-class CategorieUpdate(BaseModel):
-    nom: Optional[str] = None
-    disponible: Optional[bool] = None
 
-class Categorie(CategorieBase):
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+
+
+class CategoryRead(CategoryBase):
     id: int
+    available: bool = False
     model_config = ConfigDict(from_attributes=True)
 
-class CategorieAvecItems(Categorie):
-    items: List[Item] = []
+
+class CategoryWithItems(CategoryRead):
+    items: List[ItemRead] = []
 
 
 # ==========================================
-# 4. COMMANDES (Orders)
+# 4. ORDERS
 # ==========================================
 
-class CommandeBase(BaseModel):
-    table: int
+class OrderBase(BaseModel):
+    table_number: Optional[int] = None
+    covers: Optional[int] = None
+    seating_location: Optional[SeatingLocation] = None
+    order_type: OrderType = OrderType.EAT_IN
+    pickup_time: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
 
-class CommandeCreate(CommandeBase):
-    items: List[CommandeItemCreate]
 
-class CommandeUpdateStatus(BaseModel):
-    statut: str
+class OrderCreate(OrderBase):
+    items: List[OrderItemCreate]
 
-class CommandeUpdateTable(BaseModel):
-    table: int
 
-class CommandeUpdateItems(BaseModel):
-    items: List[CommandeItemCreate]
+class OrderUpdateStatus(BaseModel):
+    status: OrderStatus
 
-class Commande(CommandeBase):
+
+class OrderUpdateItems(BaseModel):
+    items: List[OrderItemCreate]
+
+
+class OrderRead(OrderBase):
     id: int
-    statut: str
-    date_creation: datetime
-    items: List[CommandeItem] = []
+    status: OrderStatus
+    total_price: Decimal = Decimal("0.00")
+    created_at: datetime
+    validated_at: Optional[datetime] = None
+    pickup_time: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    items: List[OrderItemRead] = []
 
     model_config = ConfigDict(from_attributes=True)
 
-Commande.model_rebuild()
-CommandeItem.model_rebuild()
+
+OrderRead.model_rebuild()
+OrderItemRead.model_rebuild()

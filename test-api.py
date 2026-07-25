@@ -1,4 +1,5 @@
 import pytest
+from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,12 +9,11 @@ import models
 import schemas
 import services
 
-# Configuration de la base de données de test en mémoire
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Surcharge de la dépendance get_db pour utiliser la base de test
+
 def override_get_db():
     db = TestingSessionLocal()
     try:
@@ -21,8 +21,10 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
+
 
 @pytest.fixture(autouse=True)
 def setup_db():
@@ -30,80 +32,116 @@ def setup_db():
     yield
     Base.metadata.drop_all(bind=engine)
 
-# ==========================================
-# TEST SCENARIOS
-# ==========================================
 
 def test_manual_stock_adjustment():
     db = TestingSessionLocal()
-    cat = models.Categorie(nom="Pizzas")
+    cat = models.Category(name="Pizzas")
     db.add(cat)
     db.commit()
-    item = models.Item(nom="Margherita", quantite_en_stock=10, categorie_id=cat.id, prix=10.0)
+    item = models.Item(name="Margherita", stock_quantity=10, category_id=cat.id, price=Decimal("10.00"))
     db.add(item)
     db.commit()
 
-    # Success: Adjust stock downwards
     services.adjust_inventory(db, item.id, 5)
-    db.refresh(item) # Rafraîchir l'objet local après modification en base
-    assert item.quantite_en_stock == 5
-    assert item.disponible is True
+    db.refresh(item)
+    assert item.stock_quantity == 5
+    assert item.is_in_stock is True
 
-    # Boundary: Adjust stock to 0
     services.adjust_inventory(db, item.id, 0)
     db.refresh(item)
-    assert item.quantite_en_stock == 0
-    assert item.disponible is False
+    assert item.stock_quantity == 0
+    assert item.is_in_stock is False
+    assert item.available is True
+
 
 def test_order_flow_success():
     db = TestingSessionLocal()
-    cat = models.Categorie(nom="Boissons")
+    cat = models.Category(name="Boissons")
     db.add(cat)
     db.commit()
-    item = models.Item(nom="Soda", quantite_en_stock=5, categorie_id=cat.id, prix=2.0)
+    item = models.Item(name="Soda", stock_quantity=5, category_id=cat.id, price=Decimal("2.00"))
     db.add(item)
     db.commit()
 
-    # Place order for 2 items
-    order_data = schemas.CommandeCreate(table=1, items=[schemas.CommandeItemCreate(item_id=item.id, quantite=2)])
+    order_data = schemas.OrderCreate(
+        table_number=1, covers=2, seating_location="indoor",
+        items=[schemas.OrderItemCreate(item_id=item.id, quantity=2)]
+    )
     result = services.place_order(db, order_data)
 
-    db.refresh(item) # Rafraîchir après la commande
+    db.refresh(item)
     assert result is not None
-    assert item.quantite_en_stock == 3
+    assert item.stock_quantity == 3
+    assert result.total_price == Decimal("4.00")
+
 
 def test_order_failure_insufficient_stock():
     db = TestingSessionLocal()
-    cat = models.Categorie(nom="Plats")
+    cat = models.Category(name="Plats")
     db.add(cat)
     db.commit()
-    item = models.Item(nom="Burger", quantite_en_stock=1, categorie_id=cat.id, prix=12.0)
+    item = models.Item(name="Burger", stock_quantity=1, category_id=cat.id, price=Decimal("12.00"))
     db.add(item)
     db.commit()
 
-    # Try to order 5 items when only 1 is available
-    order_data = schemas.CommandeCreate(table=1, items=[schemas.CommandeItemCreate(item_id=item.id, quantite=5)])
+    order_data = schemas.OrderCreate(
+        table_number=1, covers=2, seating_location="indoor",
+        items=[schemas.OrderItemCreate(item_id=item.id, quantity=5)]
+    )
     result = services.place_order(db, order_data)
 
     assert result is None
 
-def test_cancel_order_restores_stock():
+
+def test_order_with_selected_options():
     db = TestingSessionLocal()
-    cat = models.Categorie(nom="Alcools")
+    cat = models.Category(name="Boissons")
     db.add(cat)
     db.commit()
-    item = models.Item(nom="Vin", quantite_en_stock=10, categorie_id=cat.id, prix=20.0)
+    item = models.Item(
+        name="Soda",
+        stock_quantity=10,
+        category_id=cat.id,
+        price=Decimal("2.00"),
+        options={"Coca-Cola": 5, "Orangina": 5},
+    )
     db.add(item)
     db.commit()
 
-    # Place order
-    order_data = schemas.CommandeCreate(table=5, items=[schemas.CommandeItemCreate(item_id=item.id, quantite=3)])
+    order_data = schemas.OrderCreate(
+        table_number=1, covers=2, seating_location="indoor",
+        items=[schemas.OrderItemCreate(
+            item_id=item.id,
+            quantity=5,
+            selected_options={"Coca-Cola": 3, "Orangina": 2},
+        )]
+    )
+    result = services.place_order(db, order_data)
+
+    assert result is not None
+    assert result.total_price == Decimal("10.00")
+    assert result.items[0].selected_options == {"Coca-Cola": 3, "Orangina": 2}
+    assert result.items[0].quantity == 5
+
+
+def test_cancel_order_restores_stock():
+    db = TestingSessionLocal()
+    cat = models.Category(name="Alcools")
+    db.add(cat)
+    db.commit()
+    item = models.Item(name="Vin", stock_quantity=10, category_id=cat.id, price=Decimal("20.00"))
+    db.add(item)
+    db.commit()
+
+    order_data = schemas.OrderCreate(
+        table_number=5, covers=3, seating_location="outdoor",
+        items=[schemas.OrderItemCreate(item_id=item.id, quantity=3)]
+    )
     order = services.place_order(db, order_data)
 
-    # Cancel order
     cancelled_order = services.cancel_order(db, order.id)
     db.expire_all()
     db.refresh(item)
-    item_mis_a_jour = db.query(models.Item).filter(models.Item.id == item.id).first()
-    assert cancelled_order.statut == "annulee"
-    assert item_mis_a_jour.quantite_en_stock == 10
+    updated_item = db.query(models.Item).filter(models.Item.id == item.id).first()
+    assert cancelled_order.status == models.OrderStatus.CANCELLED
+    assert updated_item.stock_quantity == 10

@@ -1,25 +1,24 @@
 import sys
 import os
 import random
+from decimal import Decimal
 
-# Ensure the current directory is in Python's search path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal, engine
 import models
 
-def init_db():
-    print("⚠️  Resetting SQLite database...")
 
-    # 1. Drop and recreate all tables to start with a clean database
+def init_db():
+    print("Resetting SQLite database...")
+
     models.Base.metadata.drop_all(bind=engine)
     models.Base.metadata.create_all(bind=engine)
-    print("✅ Database tables recreated successfully.")
+    print("Database tables recreated successfully.")
 
     db = SessionLocal()
     try:
-        # 2. Definition of real categories
-        categories_names = [
+        category_names = [
             "Boissons",
             "Alcools",
             "Pizzas",
@@ -30,149 +29,145 @@ def init_db():
         ]
 
         db_categories = {}
-        for nom in categories_names:
-            cat = models.Categorie(nom=nom, disponible=True)
+        for name in category_names:
+            cat = models.Category(name=name)
             db.add(cat)
             db.flush()
-            db_categories[nom] = cat
+            db_categories[name] = cat
 
-        print(f"📂 {len(categories_names)} real categories created.")
+        print(f"{len(category_names)} categories created.")
 
         menu_items = [
             # --- PIZZAS ---
-            {"nom": "Margherita", "prix": 8.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Napolitaine", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Norvégienne", "prix": 13.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "4 Fromages", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Reine", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Végétarienne", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Auvergnate", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "San Giorgio", "prix": 12.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Orientale", "prix": 11.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Kebab", "prix": 12.0, "disponible": True, "categorie": "Pizzas"},
-            {"nom": "Ingrédient supplémentaire", "prix": 1.0, "disponible": True, "categorie": "Pizzas"},
+            {"name": "Margherita", "price": Decimal("8.00"), "available": True, "category": "Pizzas"},
+            {"name": "Napolitaine", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "Norvégienne", "price": Decimal("13.00"), "available": True, "category": "Pizzas"},
+            {"name": "4 Fromages", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "Reine", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "Végétarienne", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "Auvergnate", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "San Giorgio", "price": Decimal("12.00"), "available": True, "category": "Pizzas"},
+            {"name": "Orientale", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
+            {"name": "Kebab", "price": Decimal("12.00"), "available": True, "category": "Pizzas"},
+            {"name": "Ingrédient supplémentaire", "price": Decimal("1.00"), "available": True, "category": "Pizzas"},
 
             # --- PANOZZOS ---
-            {"nom": "Panozzo Kebab", "prix": 9.0, "disponible": True, "categorie": "Panozzos"},
-            {"nom": "Panozzo Auvergnat", "prix": 9.0, "disponible": True, "categorie": "Panozzos"},
-            {"nom": "Panozzo Italien", "prix": 9.0, "disponible": True, "categorie": "Panozzos"},
-            {"nom": "Panozzo Végétarien", "prix": 9.0, "disponible": True, "categorie": "Panozzos"},
+            {"name": "Panozzo Kebab", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
+            {"name": "Panozzo Auvergnat", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
+            {"name": "Panozzo Italien", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
+            {"name": "Panozzo Végétarien", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
 
             # --- SALADES ---
-            {"nom": "Salade César", "prix": 12.0, "disponible": True, "categorie": "Salades"},
-            {"nom": "Salade Chèvre chaud", "prix": 12.0, "disponible": True, "categorie": "Salades"},
-            {"nom": "Salade San Giorgio", "prix": 13.0, "disponible": True, "categorie": "Salades"},
+            {"name": "Salade César", "price": Decimal("12.00"), "available": True, "category": "Salades"},
+            {"name": "Salade Chèvre chaud", "price": Decimal("12.00"), "available": True, "category": "Salades"},
+            {"name": "Salade San Giorgio", "price": Decimal("13.00"), "available": True, "category": "Salades"},
 
             # --- FORMULES & MENUS ---
-            {"nom": "Menu : Panozzo + Boisson", "prix": 10.5, "disponible": True, "categorie": "Formules et Menus"},
+            {"name": "Menu : Panozzo + Boisson", "price": Decimal("10.50"), "available": True, "category": "Formules et Menus"},
             {
-                "nom": "Menu Enfant (-10 ans) : Pizza Margherita/Pâtes + Dessert + Sirop au choix",
-                "prix": 6.0,
-                "disponible": True,
-                "categorie": "Formules et Menus",
+                "name": "Menu Enfant (-10 ans) : Pizza Margherita/Pâtes + Dessert + Sirop au choix",
+                "price": Decimal("6.00"),
+                "available": True,
+                "category": "Formules et Menus",
                 "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche"]
             },
 
-            # --- BOISSONS (NON-ALCOHOLIC) ---
+            # --- BOISSONS ---
             {
-                "nom": "Soda",
-                "prix": 2.0,
-                "disponible": True,
-                "categorie": "Boissons",
+                "name": "Soda",
+                "price": Decimal("2.00"),
+                "available": True,
+                "category": "Boissons",
                 "options": ["Coca-Cola", "Coca 0", "Orangina", "Ice Tea"]
             },
-            {"nom": "Eau pétillante", "prix": 1.5, "disponible": True, "categorie": "Boissons"},
-            {"nom": "San Pellegrino", "prix": 2.0, "disponible": True, "categorie": "Boissons"},
+            {"name": "Eau pétillante", "price": Decimal("1.50"), "available": True, "category": "Boissons"},
+            {"name": "San Pellegrino", "price": Decimal("2.00"), "available": True, "category": "Boissons"},
             {
-                "nom": "Sirop",
-                "prix": 1.5,
-                "disponible": True,
-                "categorie": "Boissons",
-                "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche", "Orgeat","Mojito"]
-            },
-            {
-                "nom": "Diabolo",
-                "prix": 2.0,
-                "disponible": True,
-                "categorie": "Boissons",
-                "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche","Orgeat","Mojito"]
-            },
-            {"nom": "Mocktail", "prix": 2.0, "disponible": True, "categorie": "Boissons"},
-
-            # --- ALCOHOLS ---
-            {"nom": "Desperados", "prix": 2.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Bière 1664 (33cl)", "prix": 2.0, "disponible": True, "categorie": "Alcools"},
-            {
-                "nom": "Demi sirop",
-                "prix": 3.0,
-                "disponible": True,
-                "categorie": "Boissons",
+                "name": "Sirop",
+                "price": Decimal("1.50"),
+                "available": True,
+                "category": "Boissons",
                 "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche", "Orgeat", "Mojito"]
             },
-            {"nom": "Verre de vin (Rosé)", "prix": 2.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Verre de vin (Rouge)", "prix": 2.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Verre de vin (Blanc)", "prix": 2.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Pichet de vin (Rosé)", "prix": 7.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Pichet de vin (Rouge)", "prix": 7.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Pichet de vin (Blanc)", "prix": 7.5, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Bouteille de vin (Rosé)", "prix": 14.0, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Bouteille de vin (Rouge)", "prix": 14.0, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Bouteille de vin (Blanc)", "prix": 14.0, "disponible": True, "categorie": "Alcools"},
-            {"nom": "Cocktail", "prix": 4.0, "disponible": True, "categorie": "Alcools"},
+            {
+                "name": "Diabolo",
+                "price": Decimal("2.00"),
+                "available": True,
+                "category": "Boissons",
+                "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche", "Orgeat", "Mojito"]
+            },
+            {"name": "Mocktail", "price": Decimal("2.00"), "available": True, "category": "Boissons"},
+
+            # --- ALCOOLS ---
+            {"name": "Desperados", "price": Decimal("2.50"), "available": True, "category": "Alcools"},
+            {"name": "Bière 1664 (33cl)", "price": Decimal("2.00"), "available": True, "category": "Alcools"},
+            {
+                "name": "Demi sirop",
+                "price": Decimal("3.00"),
+                "available": True,
+                "category": "Boissons",
+                "options": ["Fraise", "Menthe", "Grenadine", "Citron", "Pêche", "Orgeat", "Mojito"]
+            },
+            {"name": "Verre de vin (Rosé)", "price": Decimal("2.50"), "available": True, "category": "Alcools"},
+            {"name": "Verre de vin (Rouge)", "price": Decimal("2.50"), "available": True, "category": "Alcools"},
+            {"name": "Verre de vin (Blanc)", "price": Decimal("2.50"), "available": True, "category": "Alcools"},
+            {"name": "Pichet de vin (Rosé)", "price": Decimal("7.50"), "available": True, "category": "Alcools"},
+            {"name": "Pichet de vin (Rouge)", "price": Decimal("7.50"), "available": True, "category": "Alcools"},
+            {"name": "Pichet de vin (Blanc)", "price": Decimal("7.50"), "available": True, "category": "Alcools"},
+            {"name": "Bouteille de vin (Rosé)", "price": Decimal("14.00"), "available": True, "category": "Alcools"},
+            {"name": "Bouteille de vin (Rouge)", "price": Decimal("14.00"), "available": True, "category": "Alcools"},
+            {"name": "Bouteille de vin (Blanc)", "price": Decimal("14.00"), "available": True, "category": "Alcools"},
+            {"name": "Cocktail", "price": Decimal("4.00"), "available": True, "category": "Alcools"},
 
             # --- DESSERTS ---
             {
-                "nom": "Glace (1 boule)",
-                "prix": 2.5,
-                "disponible": True,
-                "categorie": "Desserts",
+                "name": "Glace (1 boule)",
+                "price": Decimal("2.50"),
+                "available": True,
+                "category": "Desserts",
                 "options": ["Vanille", "Citron", "Chocolat", "Fraise", "Cassis", "Framboise", "Pistache"]
             },
             {
-                "nom": "Glace (2 boules)",
-                "prix": 4.0,
-                "disponible": True,
-                "categorie": "Desserts",
+                "name": "Glace (2 boules)",
+                "price": Decimal("4.00"),
+                "available": True,
+                "category": "Desserts",
                 "options": ["Vanille", "Citron", "Chocolat", "Fraise", "Cassis", "Framboise", "Pistache"]
             },
-            {"nom": "Part de dessert maison", "prix": 4.0, "disponible": True, "categorie": "Desserts"},
+            {"name": "Part de dessert maison", "price": Decimal("4.00"), "available": True, "category": "Desserts"},
         ]
 
-        # Link each item to its corresponding category using the retrieved ID
         for item in menu_items:
-            cat_associee = db_categories.get(item["categorie"])
-            if cat_associee:
+            cat = db_categories.get(item["category"])
+            if cat:
                 options_raw = item.get("options")
                 options_dict = None
                 stock_general = None
 
-                # ⚠️ CHANGEMENT ICI : Si l'article a des options, on crée un dictionnaire {Option: Qté}
                 if options_raw:
                     options_dict = {option: random.randint(0, 10) for option in options_raw}
                 else:
-                    # Si c'est un article classique (ex: Margherita), on lui colle un stock global aléatoire
                     stock_general = random.randint(0, 10)
 
                 new_item = models.Item(
-                    nom=item["nom"],
-                    prix=item["prix"],
-                    disponible=item["disponible"],
-                    categorie_id=cat_associee.id,
-                    options=options_dict,  # Nouveau format JSON : {"Coca-Cola": 4, "Ice Tea": 8}
-                    quantite_en_stock=stock_general
+                    name=item["name"],
+                    price=item["price"],
+                    available=item["available"],
+                    category_id=cat.id,
+                    options=options_dict,
+                    stock_quantity=stock_general
                 )
                 db.add(new_item)
 
-        # Save changes permanently to the database
         db.commit()
-        print("🍕 All categories and real products have been successfully injected!")
-        print("🎉 Your San Giorgio database was initiated!")
+        print("All categories and products have been successfully injected!")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ An error occurred during database initialization: {e}")
+        print(f"An error occurred during database initialization: {e}")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     init_db()

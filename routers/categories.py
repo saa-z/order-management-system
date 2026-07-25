@@ -5,47 +5,43 @@ from typing import List
 import models
 import schemas
 from database import get_db
-import services
 
-# We define the router with a prefix.
-# Inside this file, "/" will automatically become "/categories/"
 router = APIRouter(
     prefix="/categories",
     tags=["Categories"]
 )
 
-@router.post("/", response_model=schemas.Categorie, status_code=status.HTTP_201_CREATED)
-def create_category(categorie: schemas.CategorieCreate, db: Session = Depends(get_db)):
-    """Create a new custom category."""
-    exists = db.query(models.Categorie).filter(models.Categorie.nom == categorie.nom).first()
+
+@router.post("/", response_model=schemas.CategoryRead, status_code=status.HTTP_201_CREATED)
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+    exists = db.query(models.Category).filter(models.Category.name == category.name).first()
     if exists:
         raise HTTPException(
             status_code=400,
-            detail=f"Category '{categorie.nom}' already exists."
+            detail=f"Category '{category.name}' already exists."
         )
-    new_cat = models.Categorie(nom=categorie.nom)
+    new_cat = models.Category(name=category.name)
     db.add(new_cat)
     db.commit()
     db.refresh(new_cat)
     return new_cat
 
 
-@router.put("/{category_id}", response_model=schemas.Categorie)
-def update_category(category_id: int, category_to_update: schemas.CategorieUpdate, db: Session = Depends(get_db)):
-    """Update an existing category's name or availability status."""
-    db_category = db.query(models.Categorie).filter(models.Categorie.id == category_id).first()
+@router.put("/{category_id}", response_model=schemas.CategoryRead)
+def update_category(category_id: int, category_update: schemas.CategoryUpdate, db: Session = Depends(get_db)):
+    db_category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found.")
 
-    if category_to_update.nom is not None:
-        exists = db.query(models.Categorie).filter(models.Categorie.nom == category_to_update.nom).first()
+    if category_update.name is not None:
+        exists = db.query(models.Category).filter(models.Category.name == category_update.name).first()
         if exists and exists.id != category_id:
             raise HTTPException(
                 status_code=400,
-                detail=f"Category '{category_to_update.nom}' already exists."
+                detail=f"Category '{category_update.name}' already exists."
             )
 
-    update_data = category_to_update.model_dump(exclude_unset=True)
+    update_data = category_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_category, key, value)
 
@@ -54,16 +50,14 @@ def update_category(category_id: int, category_to_update: schemas.CategorieUpdat
     return db_category
 
 
-@router.get("/", response_model=List[schemas.CategorieAvecItems])
+@router.get("/", response_model=List[schemas.CategoryWithItems])
 def list_categories(db: Session = Depends(get_db)):
-    """Retrieve all categories along with their respective items."""
-    return db.query(models.Categorie).all()
+    return db.query(models.Category).all()
 
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(category_id: int, db: Session = Depends(get_db)):
-    """Delete a category and cascade delete its items."""
-    db_category = db.query(models.Categorie).filter(models.Categorie.id == category_id).first()
+    db_category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found.")
 

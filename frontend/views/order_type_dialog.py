@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
-                               QLabel, QSpinBox, QStackedWidget, QWidget)
+                               QLabel, QStackedWidget, QWidget)
+from PySide6.QtCore import Qt
 
 
 class OrderTypeDialog(QDialog):
@@ -7,87 +8,117 @@ class OrderTypeDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Type de commande")
         self.setModal(True)
+        self.setMinimumWidth(420)
+        self.setMinimumHeight(250)
 
-        self.order_type = "eat in"
-        self.table_number = None
+        self.order_type = "eat_in"
+        self.seating_location = None
 
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(24, 24, 24, 24)
+        main_layout.setSpacing(16)
 
-        # On utilise un QStackedWidget pour passer facilement de la vue 1 à la vue 2
         self.stack = QStackedWidget()
 
-        # --- VUE 1 : Choix du type (Sur place / À emporter) ---
+        # --- Page 1: Order type ---
         self.page_choice = QWidget()
         layout_choice = QVBoxLayout(self.page_choice)
+        layout_choice.setSpacing(16)
 
-        label_choice = QLabel("Choisissez le mode de commande :")
-        label_choice.setStyleSheet("font-size: 14px; font-weight: bold;")
+        label_choice = QLabel("Mode de commande")
+        label_choice.setObjectName("page-title")
+        label_choice.setAlignment(Qt.AlignCenter)
         layout_choice.addWidget(label_choice)
 
+        subtitle = QLabel("Choisissez le type de service")
+        subtitle.setObjectName("page-subtitle")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout_choice.addWidget(subtitle)
+
+        layout_choice.addSpacing(8)
+
         btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+
         btn_eat_in = QPushButton("Sur Place")
-        btn_take_away = QPushButton("À Emporter")
-
-        # Style plus visible pour de la caisse
-        btn_eat_in.setMinimumHeight(50)
-        btn_take_away.setMinimumHeight(50)
-
+        btn_eat_in.setObjectName("menu-card")
+        btn_eat_in.setMinimumHeight(80)
+        btn_eat_in.setCursor(Qt.PointingHandCursor)
         btn_eat_in.clicked.connect(self.on_eat_in_selected)
+
+        btn_take_away = QPushButton("A Emporter")
+        btn_take_away.setObjectName("menu-card")
+        btn_take_away.setMinimumHeight(80)
+        btn_take_away.setCursor(Qt.PointingHandCursor)
         btn_take_away.clicked.connect(self.on_take_away_selected)
 
         btn_layout.addWidget(btn_eat_in)
         btn_layout.addWidget(btn_take_away)
         layout_choice.addLayout(btn_layout)
+        layout_choice.addStretch()
 
-        # --- VUE 2 : Numéro de table (uniquement pour Sur Place) ---
-        self.page_table = QWidget()
-        layout_table = QVBoxLayout(self.page_table)
+        # --- Page 2: Seating location ---
+        self.page_seating = QWidget()
+        layout_seating = QVBoxLayout(self.page_seating)
+        layout_seating.setSpacing(16)
 
-        label_table = QLabel("Saisissez le numéro de table :")
-        label_table.setStyleSheet("font-size: 14px; font-weight: bold;")
-        layout_table.addWidget(label_table)
+        label_seating = QLabel("Emplacement")
+        label_seating.setObjectName("page-title")
+        label_seating.setAlignment(Qt.AlignCenter)
+        layout_seating.addWidget(label_seating)
 
-        table_input_layout = QHBoxLayout()
-        self.spin_table = QSpinBox()
-        self.spin_table.setRange(1, 200)
-        self.spin_table.setMinimumHeight(35)
-        table_input_layout.addWidget(QLabel("Table n° :"))
-        table_input_layout.addWidget(self.spin_table)
-        layout_table.addLayout(table_input_layout)
+        subtitle_seating = QLabel("Salle ou terrasse ?")
+        subtitle_seating.setObjectName("page-subtitle")
+        subtitle_seating.setAlignment(Qt.AlignCenter)
+        layout_seating.addWidget(subtitle_seating)
 
-        # Boutons de confirmation
-        confirm_layout = QHBoxLayout()
-        btn_back = QPushButton("Retour")
-        btn_valid = QPushButton("Valider")
+        layout_seating.addSpacing(8)
 
-        btn_back.clicked.connect(lambda: self.stack.setCurrentIndex(0))
-        btn_valid.clicked.connect(self.validate_eat_in)
+        seating_layout = QHBoxLayout()
+        seating_layout.setSpacing(12)
 
-        confirm_layout.addWidget(btn_back)
-        confirm_layout.addWidget(btn_valid)
-        layout_table.addLayout(confirm_layout)
+        btn_indoor = QPushButton("Salle")
+        btn_indoor.setObjectName("menu-card")
+        btn_indoor.setMinimumHeight(80)
+        btn_indoor.setCursor(Qt.PointingHandCursor)
+        btn_indoor.clicked.connect(lambda: self.on_seating_selected("indoor"))
 
-        # Ajout des vues au Stack
+        btn_outdoor = QPushButton("Terrasse")
+        btn_outdoor.setObjectName("menu-card")
+        btn_outdoor.setMinimumHeight(80)
+        btn_outdoor.setCursor(Qt.PointingHandCursor)
+        btn_outdoor.clicked.connect(lambda: self.on_seating_selected("outdoor"))
+
+        seating_layout.addWidget(btn_indoor)
+        seating_layout.addWidget(btn_outdoor)
+        layout_seating.addLayout(seating_layout)
+
+        layout_seating.addStretch()
+
+        btn_back_seating = QPushButton("Retour")
+        btn_back_seating.setObjectName("btn-secondary")
+        btn_back_seating.setCursor(Qt.PointingHandCursor)
+        btn_back_seating.setMinimumHeight(40)
+        btn_back_seating.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        layout_seating.addWidget(btn_back_seating)
+
         self.stack.addWidget(self.page_choice)
-        self.stack.addWidget(self.page_table)
+        self.stack.addWidget(self.page_seating)
 
         main_layout.addWidget(self.stack)
 
     def on_eat_in_selected(self):
-        """Bascule vers l'étape de saisie de la table."""
-        self.order_type = "eat in"
+        self.order_type = "eat_in"
         self.stack.setCurrentIndex(1)
 
     def on_take_away_selected(self):
-        """Valide directement la commande à emporter."""
-        self.order_type = "take away"
-        self.table_number = None
+        self.order_type = "take_away"
+        self.seating_location = None
         self.accept()
 
-    def validate_eat_in(self):
-        """Valide la table et ferme la boîte."""
-        self.table_number = self.spin_table.value()
+    def on_seating_selected(self, location):
+        self.seating_location = location
         self.accept()

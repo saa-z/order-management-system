@@ -1,33 +1,69 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+                               QPushButton, QLabel, QFrame, QSpacerItem, QSizePolicy)
+from PySide6.QtCore import Qt
 
 
 class MenuPage(QWidget):
     def __init__(self, main_window, api_client):
-        """
-        Initialize the Menu Page.
-        :param main_window: Reference to the MainWindow for navigation.
-        :param api_client: Reference to the API client for data interaction.
-        """
         super().__init__()
         self.main_window = main_window
         self.api = api_client
+        self.init_ui()
 
-        layout = QVBoxLayout()
+    def init_ui(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(40, 30, 40, 30)
 
-        # UI labels (French), page keys (must match MainWindow dictionary keys)
-        buttons = [
-            ("Prendre commande", "ORDER"),
-            ("Gestion des stocks", "STOCK"),
-            ("Gestion des articles", "ITEMS"),
-            ("Gestion des accès", "ACCESS"),
-            ("Historique", "HISTORY")
-        ]
+        header = QHBoxLayout()
+        title = QLabel("SAN GIORGIO")
+        title.setObjectName("page-title")
+        header.addWidget(title)
+        header.addStretch()
+        outer.addLayout(header)
 
-        # Create buttons dynamically
-        for text, page_key in buttons:
-            btn = QPushButton(text)
-            # Link the button click to the navigation method
-            btn.clicked.connect(lambda checked, pk=page_key: self.main_window.go_to(pk))
-            layout.addWidget(btn)
+        subtitle = QLabel("Que souhaitez-vous faire ?")
+        subtitle.setObjectName("page-subtitle")
+        outer.addWidget(subtitle)
 
-        self.setLayout(layout)
+        outer.addSpacing(20)
+
+        grid = QGridLayout()
+        grid.setSpacing(16)
+
+        btn_order = QPushButton("Prendre commande")
+        btn_order.setObjectName("menu-card-primary")
+        btn_order.setMinimumHeight(100)
+        btn_order.setCursor(Qt.PointingHandCursor)
+        btn_order.clicked.connect(lambda: self.main_window.go_to("ORDER"))
+        grid.addWidget(btn_order, 0, 0, 1, 2)
+
+        btn_stock = QPushButton("Gestion des stocks")
+        btn_stock.setObjectName("menu-card")
+        btn_stock.setMinimumHeight(80)
+        btn_stock.setCursor(Qt.PointingHandCursor)
+        btn_stock.clicked.connect(lambda: self.main_window.go_to("STOCK"))
+        grid.addWidget(btn_stock, 1, 0)
+
+        btn_items = QPushButton("Gestion des articles")
+        btn_items.setObjectName("menu-card")
+        btn_items.setMinimumHeight(80)
+        btn_items.setCursor(Qt.PointingHandCursor)
+        btn_items.clicked.connect(lambda: self.main_window.go_to("ITEMS"))
+        grid.addWidget(btn_items, 1, 1)
+
+        btn_history = QPushButton("Historique")
+        btn_history.setObjectName("menu-card")
+        btn_history.setMinimumHeight(80)
+        btn_history.setCursor(Qt.PointingHandCursor)
+        btn_history.clicked.connect(lambda: self.main_window.go_to("HISTORY"))
+        grid.addWidget(btn_history, 2, 0)
+
+        btn_access = QPushButton("Gestion des acces")
+        btn_access.setObjectName("menu-card")
+        btn_access.setMinimumHeight(80)
+        btn_access.setCursor(Qt.PointingHandCursor)
+        btn_access.clicked.connect(lambda: self.main_window.go_to("ACCESS"))
+        grid.addWidget(btn_access, 2, 1)
+
+        outer.addLayout(grid, stretch=1)
+        outer.addStretch()
