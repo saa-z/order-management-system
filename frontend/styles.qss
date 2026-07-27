@@ -256,8 +256,8 @@ QTableWidget {
 }
 
 QTableWidget::item {
-    padding: 8px 12px;
-    border-bottom: 1px solid #2D2824;
+    padding: 4px 12px;
+    border: none;
 }
 
 QTableWidget::item:selected {

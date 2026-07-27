@@ -113,26 +113,25 @@ class StockPage(QWidget):
         items = self.categories_data.get(category_name, [])
 
         for item_data in items:
-            options = item_data.get("options")
+            options = item_data.get("options", [])
 
             parent_item = QTreeWidgetItem([item_data["name"]])
             self.items_tree.addTopLevelItem(parent_item)
 
-            if options and isinstance(options, dict):
+            if options:
                 parent_item.setExpanded(True)
 
-                for option_name, option_stock in options.items():
-                    child_item = QTreeWidgetItem([option_name])
+                for opt in options:
+                    child_item = QTreeWidgetItem([opt["name"]])
                     parent_item.addChild(child_item)
 
                     combo = QComboBox()
                     combo.setEditable(True)
                     combo.addItems([str(i) for i in range(101)])
-                    combo.setCurrentText(str(option_stock))
+                    combo.setCurrentText(str(opt["stock_quantity"]))
 
-                    combo.setProperty("item_id", item_data["id"])
+                    combo.setProperty("option_id", opt["id"])
                     combo.setProperty("is_option", True)
-                    combo.setProperty("option_key", option_name)
 
                     self.items_tree.setItemWidget(child_item, 1, combo)
             else:
@@ -148,26 +147,24 @@ class StockPage(QWidget):
 
     def save_changes(self):
         try:
-            payloads = {}
-
             for i in range(self.items_tree.topLevelItemCount()):
                 parent_item = self.items_tree.topLevelItem(i)
 
                 combo = self.items_tree.itemWidget(parent_item, 1)
                 if combo:
-                    self._collect_combo_data(combo, payloads)
+                    is_option = combo.property("is_option")
+                    if not is_option:
+                        item_id = combo.property("item_id")
+                        new_qty = int(combo.currentText())
+                        self.api.update_item_stock(item_id, new_qty)
 
                 for j in range(parent_item.childCount()):
                     child_item = parent_item.child(j)
                     child_combo = self.items_tree.itemWidget(child_item, 1)
                     if child_combo:
-                        self._collect_combo_data(child_combo, payloads)
-
-            for item_id, changes in payloads.items():
-                if changes["options_dict"]:
-                    self.api.update_stock_raw(item_id, {"options": changes["options_dict"]})
-                elif changes["global_qty"] is not None:
-                    self.api.update_item_stock(item_id, changes["global_qty"])
+                        option_id = child_combo.property("option_id")
+                        new_qty = int(child_combo.currentText())
+                        self.api.update_option_stock(option_id, new_qty)
 
             QMessageBox.information(self, "Succes", "Stocks mis a jour avec succes.")
             self.fetch_data()
@@ -176,20 +173,6 @@ class StockPage(QWidget):
             QMessageBox.warning(self, "Erreur", "Veuillez entrer des quantites numeriques valides.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur inattendue s'est produite : {e}")
-
-    def _collect_combo_data(self, combo, payloads):
-        item_id = combo.property("item_id")
-        is_option = combo.property("is_option")
-        new_qty = int(combo.currentText())
-
-        if item_id not in payloads:
-            payloads[item_id] = {"global_qty": None, "options_dict": {}}
-
-        if is_option:
-            option_key = combo.property("option_key")
-            payloads[item_id]["options_dict"][option_key] = new_qty
-        else:
-            payloads[item_id]["global_qty"] = new_qty
 
     def cancel_changes(self):
         self.fetch_data()

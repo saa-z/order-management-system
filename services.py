@@ -9,22 +9,28 @@ import models, schemas
 # ==========================================
 
 def get_menu_items(db: Session):
-    return db.query(models.Item).all()
+    return db.query(models.Item).filter(models.Item.deleted_at == None).all()
 
 
 def get_available_items(db: Session):
-    return db.query(models.Item).filter(models.Item.available == True).all()
+    return db.query(models.Item).filter(
+        models.Item.available == True,
+        models.Item.deleted_at == None,
+    ).all()
 
 
 def get_restock_list(db: Session):
-    return db.query(models.Item).filter(models.Item.stock_quantity <= 0).all()
+    return db.query(models.Item).filter(
+        models.Item.stock_quantity <= 0,
+        models.Item.deleted_at == None,
+    ).all()
 
 
 def adjust_inventory(db: Session, item_id: int, new_quantity: int):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if item and item.stock_quantity != new_quantity:
         item.stock_quantity = new_quantity
-        item.last_modified = datetime.now(timezone.utc)
+        item.modified_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(item)
     return item
@@ -32,11 +38,10 @@ def adjust_inventory(db: Session, item_id: int, new_quantity: int):
 
 def decrease_inventory_after_order(db: Session, item_id: int, quantity_to_remove: int):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
-
     if item and item.stock_quantity is not None:
         if item.stock_quantity >= quantity_to_remove:
             item.stock_quantity -= quantity_to_remove
-            item.last_modified = datetime.now(timezone.utc)
+            item.modified_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(item)
             return item
@@ -45,12 +50,103 @@ def decrease_inventory_after_order(db: Session, item_id: int, quantity_to_remove
     return item
 
 
+def decrease_option_stock(db: Session, item_option_id: int, quantity: int):
+    option = db.query(models.ItemOption).filter(models.ItemOption.id == item_option_id).first()
+    if option and option.stock_quantity >= quantity:
+        option.stock_quantity -= quantity
+        db.flush()
+        return option
+    return None
+
+
+def restore_option_stock(db: Session, item_option_id: int, quantity: int):
+    option = db.query(models.ItemOption).filter(models.ItemOption.id == item_option_id).first()
+    if option:
+        option.stock_quantity += quantity
+        db.flush()
+
+
+# ==========================================
+# SOFT DELETE / RESTORE
+# ==========================================
+
+def soft_delete_category(db: Session, category_id: int):
+    now = datetime.now(timezone.utc)
+    cat = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not cat or cat.deleted_at is not None:
+        return None
+    cat.deleted_at = now
+    for item in cat.items:
+        if item.deleted_at is None:
+            item.deleted_at = now
+            for opt in item.options:
+                if opt.deleted_at is None:
+                    opt.deleted_at = now
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+def restore_category(db: Session, category_id: int):
+    cat = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not cat or cat.deleted_at is None:
+        return None
+    cat.deleted_at = None
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+def soft_delete_item(db: Session, item_id: int):
+    now = datetime.now(timezone.utc)
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item or item.deleted_at is not None:
+        return None
+    item.deleted_at = now
+    for opt in item.options:
+        if opt.deleted_at is None:
+            opt.deleted_at = now
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def restore_item(db: Session, item_id: int):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item or item.deleted_at is None:
+        return None
+    item.deleted_at = None
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def soft_delete_item_option(db: Session, option_id: int):
+    opt = db.query(models.ItemOption).filter(models.ItemOption.id == option_id).first()
+    if not opt or opt.deleted_at is not None:
+        return None
+    opt.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(opt)
+    return opt
+
+
+def restore_item_option(db: Session, option_id: int):
+    opt = db.query(models.ItemOption).filter(models.ItemOption.id == option_id).first()
+    if not opt or opt.deleted_at is None:
+        return None
+    opt.deleted_at = None
+    db.commit()
+    db.refresh(opt)
+    return opt
+
+
 # ==========================================
 # CATEGORIES
 # ==========================================
 
 def get_all_categories(db: Session):
-    return db.query(models.Category).all()
+    return db.query(models.Category).filter(models.Category.deleted_at == None).all()
 
 
 # ==========================================
@@ -69,11 +165,23 @@ def calculate_order_total(db: Session, order_items: list[schemas.OrderItemCreate
 def place_order(db: Session, order_data: schemas.OrderCreate):
     for item_data in order_data.items:
         db_item = db.query(models.Item).filter(models.Item.id == item_data.item_id).first()
-        if not db_item or (db_item.stock_quantity is not None and db_item.stock_quantity < item_data.quantity):
+        if not db_item:
             return None
+        if db_item.stock_quantity is not None and db_item.stock_quantity < item_data.quantity:
+            return None
+        if item_data.selected_options:
+            for sel_opt in item_data.selected_options:
+                option = db.query(models.ItemOption).filter(
+                    models.ItemOption.id == sel_opt.item_option_id
+                ).first()
+                if not option or option.stock_quantity < sel_opt.quantity:
+                    return None
 
     for item_data in order_data.items:
         decrease_inventory_after_order(db, item_data.item_id, item_data.quantity)
+        if item_data.selected_options:
+            for sel_opt in item_data.selected_options:
+                decrease_option_stock(db, sel_opt.item_option_id, sel_opt.quantity)
 
     total = calculate_order_total(db, order_data.items)
 
@@ -94,10 +202,24 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
         new_order_item = models.OrderItem(
             item_id=item_data.item_id,
             quantity=item_data.quantity,
-            selected_options=item_data.selected_options,
             comment=item_data.comment,
             unit_price=db_item.price if db_item else Decimal("0.00"),
+            item_name_snapshot=db_item.name if db_item else "",
         )
+
+        if item_data.selected_options:
+            for sel_opt in item_data.selected_options:
+                option = db.query(models.ItemOption).filter(
+                    models.ItemOption.id == sel_opt.item_option_id
+                ).first()
+                new_order_item.selected_options.append(
+                    models.OrderItemOption(
+                        item_option_id=sel_opt.item_option_id,
+                        quantity=sel_opt.quantity,
+                        option_name_snapshot=option.name if option else "",
+                    )
+                )
+
         new_order.items.append(new_order_item)
 
     db.add(new_order)
@@ -110,7 +232,10 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
 def cancel_order(db: Session, order_id: int):
     order = (
         db.query(models.Order)
-        .options(joinedload(models.Order.items))
+        .options(
+            joinedload(models.Order.items)
+            .joinedload(models.OrderItem.selected_options)
+        )
         .filter(models.Order.id == order_id)
         .first()
     )
@@ -120,10 +245,11 @@ def cancel_order(db: Session, order_id: int):
 
     for order_item in order.items:
         db_item = db.query(models.Item).filter(models.Item.id == order_item.item_id).first()
-
         if db_item and db_item.stock_quantity is not None:
             db_item.stock_quantity += order_item.quantity
-            db_item.last_modified = datetime.now(timezone.utc)
+            db_item.modified_at = datetime.now(timezone.utc)
+        for sel_opt in order_item.selected_options:
+            restore_option_stock(db, sel_opt.item_option_id, sel_opt.quantity)
 
     order.status = models.OrderStatus.CANCELLED
     db.commit()

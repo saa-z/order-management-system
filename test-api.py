@@ -103,9 +103,13 @@ def test_order_with_selected_options():
         stock_quantity=10,
         category_id=cat.id,
         price=Decimal("2.00"),
-        options={"Coca-Cola": 5, "Orangina": 5},
     )
     db.add(item)
+    db.flush()
+
+    opt_coca = models.ItemOption(item_id=item.id, name="Coca-Cola", stock_quantity=5)
+    opt_orangina = models.ItemOption(item_id=item.id, name="Orangina", stock_quantity=5)
+    db.add_all([opt_coca, opt_orangina])
     db.commit()
 
     order_data = schemas.OrderCreate(
@@ -113,15 +117,23 @@ def test_order_with_selected_options():
         items=[schemas.OrderItemCreate(
             item_id=item.id,
             quantity=5,
-            selected_options={"Coca-Cola": 3, "Orangina": 2},
+            selected_options=[
+                schemas.OrderItemOptionCreate(item_option_id=opt_coca.id, quantity=3),
+                schemas.OrderItemOptionCreate(item_option_id=opt_orangina.id, quantity=2),
+            ],
         )]
     )
     result = services.place_order(db, order_data)
 
     assert result is not None
     assert result.total_price == Decimal("10.00")
-    assert result.items[0].selected_options == {"Coca-Cola": 3, "Orangina": 2}
     assert result.items[0].quantity == 5
+    assert len(result.items[0].selected_options) == 2
+
+    db.refresh(opt_coca)
+    db.refresh(opt_orangina)
+    assert opt_coca.stock_quantity == 2
+    assert opt_orangina.stock_quantity == 3
 
 
 def test_cancel_order_restores_stock():
@@ -145,3 +157,38 @@ def test_cancel_order_restores_stock():
     updated_item = db.query(models.Item).filter(models.Item.id == item.id).first()
     assert cancelled_order.status == models.OrderStatus.CANCELLED
     assert updated_item.stock_quantity == 10
+
+
+def test_cancel_order_restores_option_stock():
+    db = TestingSessionLocal()
+    cat = models.Category(name="Boissons")
+    db.add(cat)
+    db.commit()
+    item = models.Item(name="Soda", stock_quantity=10, category_id=cat.id, price=Decimal("2.00"))
+    db.add(item)
+    db.flush()
+
+    opt = models.ItemOption(item_id=item.id, name="Coca-Cola", stock_quantity=5)
+    db.add(opt)
+    db.commit()
+
+    order_data = schemas.OrderCreate(
+        table_number=1, covers=1, seating_location="indoor",
+        items=[schemas.OrderItemCreate(
+            item_id=item.id,
+            quantity=3,
+            selected_options=[
+                schemas.OrderItemOptionCreate(item_option_id=opt.id, quantity=3),
+            ],
+        )]
+    )
+    order = services.place_order(db, order_data)
+    assert order is not None
+
+    db.refresh(opt)
+    assert opt.stock_quantity == 2
+
+    services.cancel_order(db, order.id)
+    db.expire_all()
+    db.refresh(opt)
+    assert opt.stock_quantity == 5

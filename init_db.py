@@ -141,23 +141,26 @@ def init_db():
             cat = db_categories.get(item["category"])
             if cat:
                 options_raw = item.get("options")
-                options_dict = None
-                stock_general = None
-
-                if options_raw:
-                    options_dict = {option: random.randint(0, 10) for option in options_raw}
-                else:
-                    stock_general = random.randint(0, 10)
+                stock_general = None if options_raw else random.randint(5, 20)
 
                 new_item = models.Item(
                     name=item["name"],
                     price=item["price"],
                     available=item["available"],
                     category_id=cat.id,
-                    options=options_dict,
-                    stock_quantity=stock_general
+                    stock_quantity=stock_general,
                 )
                 db.add(new_item)
+                db.flush()
+
+                if options_raw:
+                    for option_name in options_raw:
+                        option = models.ItemOption(
+                            item_id=new_item.id,
+                            name=option_name,
+                            stock_quantity=random.randint(5, 20),
+                        )
+                        db.add(option)
 
         db.commit()
         print("All categories and products have been successfully injected!")

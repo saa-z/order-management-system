@@ -229,15 +229,25 @@ class PosOrderPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur API", f"Impossible de charger les donnees : {e}")
 
+    def _format_selected_options_display(self, selected_options):
+        if not selected_options:
+            return ""
+        return ", ".join(f"{o['name']} x{o['quantity']}" for o in selected_options)
+
     def add_to_cart(self, row, column):
         item_data = self.items_table.item(row, 0).data(Qt.UserRole).copy()
+
+        if not item_data.get("is_in_stock", True):
+            QMessageBox.warning(self, "Rupture de stock", f"« {item_data['name']} » n'est plus disponible.")
+            return
+
         item_data["comment"] = None
         item_data["selected_options"] = None
 
-        options = item_data.get("options")
+        options = item_data.get("options", [])
 
-        if options and isinstance(options, dict):
-            available_options = {name: stock for name, stock in options.items() if stock > 0}
+        if options:
+            available_options = [o for o in options if o["stock_quantity"] > 0]
             if not available_options:
                 QMessageBox.warning(self, "Rupture", f"Toutes les options de « {item_data['name']} » sont en rupture.")
                 return
@@ -261,7 +271,7 @@ class PosOrderPage(QWidget):
 
         display_name = item_data["name"]
         if item_data["selected_options"]:
-            details = ", ".join(f"{n} x{q}" for n, q in item_data["selected_options"].items())
+            details = self._format_selected_options_display(item_data["selected_options"])
             display_name = f"{item_data['name']} ({details})"
 
         name_item = QTableWidgetItem(display_name)
@@ -308,7 +318,7 @@ class PosOrderPage(QWidget):
             item_data["comment"] = text
             display_name = item_data["name"]
             if item_data.get("selected_options"):
-                details = ", ".join(f"{n} x{q}" for n, q in item_data["selected_options"].items())
+                details = self._format_selected_options_display(item_data["selected_options"])
                 display_name = f"{item_data['name']} ({details})"
             if text:
                 display_name += f" [{text}]"
@@ -353,11 +363,7 @@ class PosOrderPage(QWidget):
             price_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.items_table.setItem(row, 2, price_item)
 
-    def send_to_kitchen(self):
-        if self.cart_list.rowCount() == 0:
-            QMessageBox.warning(self, "Panier vide", "Le panier est vide. Impossible d'envoyer en cuisine.")
-            return
-
+    def _build_order_payload(self):
         order_items = []
         items_to_print = []
 
@@ -368,10 +374,17 @@ class PosOrderPage(QWidget):
             qty_item = self.cart_list.item(row, 1)
             qty = int(qty_item.text()) if qty_item else 1
 
+            api_selected_options = None
+            if item_data.get("selected_options"):
+                api_selected_options = [
+                    {"item_option_id": o["item_option_id"], "quantity": o["quantity"]}
+                    for o in item_data["selected_options"]
+                ]
+
             order_items.append({
                 "item_id": item_data["id"],
                 "quantity": qty,
-                "selected_options": item_data.get("selected_options"),
+                "selected_options": api_selected_options,
                 "comment": item_data.get("comment"),
             })
 
@@ -413,6 +426,15 @@ class PosOrderPage(QWidget):
             "customer_phone": customer_phone,
             "items": order_items,
         }
+
+        return order_payload, items_to_print
+
+    def send_to_kitchen(self):
+        if self.cart_list.rowCount() == 0:
+            QMessageBox.warning(self, "Panier vide", "Le panier est vide. Impossible d'envoyer en cuisine.")
+            return
+
+        order_payload, items_to_print = self._build_order_payload()
 
         result = self.api.create_order(order_payload)
         if not result:
@@ -498,6 +520,11 @@ class PosOrderPage(QWidget):
                 info_lines.append(f"<b>Tel :</b> {phone}")
         return "<br>".join(info_lines)
 
+    def _format_options_for_ticket(self, selected_options):
+        if not selected_options:
+            return ""
+        return ", ".join(f"{o['name']} x{o['quantity']}" for o in selected_options)
+
     def print_kitchen_ticket(self, result, categorized_items, sorted_categories):
         order_id = result.get("id", "")
         info_html = self._get_kitchen_info(order_id)
@@ -510,7 +537,7 @@ class PosOrderPage(QWidget):
             for item in categorized_items[cat]:
                 details = f"<b>{item['name']}</b>"
                 if item.get("selected_options"):
-                    opts = ", ".join(f"{n} x{q}" for n, q in item["selected_options"].items())
+                    opts = self._format_options_for_ticket(item["selected_options"])
                     details += f"<br><span class='opt'>{opts}</span>"
                 if item.get("comment"):
                     details += f"<br><i class='cmt'>{item['comment']}</i>"
@@ -551,7 +578,7 @@ class PosOrderPage(QWidget):
             for item in categorized_items[cat]:
                 name = item["name"]
                 if item.get("selected_options"):
-                    opts = ", ".join(f"{n} x{q}" for n, q in item["selected_options"].items())
+                    opts = self._format_options_for_ticket(item["selected_options"])
                     name += f" <span class='opt'>({opts})</span>"
 
                 qty = item["quantity"]
