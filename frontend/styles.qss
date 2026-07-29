@@ -1,6 +1,11 @@
 /* ============================================
    SAN GIORGIO — Restaurant Theme
-   Palette: brun foncé, crème, bronze/or, rouge brique, vert olive
+   Palette (charte logo) :
+     - Fond sombre      : #1A1714
+     - Bordeaux (CTA)   : #7A1E1C, hover #963433, pressed #5F1616
+     - Doré (typo)      : #D4A365 / #B88647
+     - Crème (texte)    : #F5F1E6
+     - Vert (validé)    : #2D6B45
    ============================================ */
 
 /* --- Global --- */
@@ -80,7 +85,7 @@ QLabel#section-header {
 
 /* --- Standard Buttons --- */
 QPushButton {
-    background-color: #B88647;
+    background-color: #7A1E1C;
     color: #F5F1E6;
     border: none;
     padding: 10px 20px;
@@ -91,11 +96,11 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background-color: #D4A365;
+    background-color: #963433;
 }
 
 QPushButton:pressed {
-    background-color: #9A7039;
+    background-color: #5F1616;
 }
 
 QPushButton:disabled {
@@ -105,14 +110,14 @@ QPushButton:disabled {
 
 /* --- Button variants via objectName --- */
 QPushButton#btn-primary {
-    background-color: #B88647;
+    background-color: #7A1E1C;
     font-size: 16px;
     padding: 14px 28px;
     border-radius: 8px;
 }
 
 QPushButton#btn-primary:hover {
-    background-color: #D4A365;
+    background-color: #963433;
 }
 
 QPushButton#btn-danger {
@@ -140,7 +145,7 @@ QPushButton#btn-success:pressed {
 }
 
 QPushButton#btn-kitchen {
-    background-color: #B88647;
+    background-color: #2D6B45;
     font-size: 16px;
     padding: 14px 24px;
     border-radius: 8px;
@@ -148,7 +153,11 @@ QPushButton#btn-kitchen {
 }
 
 QPushButton#btn-kitchen:hover {
-    background-color: #D4A365;
+    background-color: #38835A;
+}
+
+QPushButton#btn-kitchen:pressed {
+    background-color: #245838;
 }
 
 QPushButton#btn-invoice {
@@ -381,6 +390,39 @@ QSpinBox::up-button:hover, QSpinBox::down-button:hover {
     background-color: #B88647;
 }
 
+/* --- TimeEdit / DateEdit --- */
+QTimeEdit, QDateEdit, QDoubleSpinBox {
+    background-color: #252220;
+    color: #F5F1E6;
+    border: 1px solid #3A3530;
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-height: 24px;
+    font-size: 14px;
+}
+
+QTimeEdit:hover, QDateEdit:hover, QDoubleSpinBox:hover {
+    border-color: #B88647;
+}
+
+QTimeEdit:focus, QDateEdit:focus, QDoubleSpinBox:focus {
+    border-color: #D4A365;
+}
+
+QTimeEdit::up-button, QTimeEdit::down-button,
+QDateEdit::up-button, QDateEdit::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    background-color: #3A3530;
+    border: none;
+    width: 20px;
+}
+
+QTimeEdit::up-button:hover, QTimeEdit::down-button:hover,
+QDateEdit::up-button:hover, QDateEdit::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {
+    background-color: #B88647;
+}
+
 /* --- Scrollbar --- */
 QScrollBar:vertical {
     background: #1E1C19;
@@ -478,6 +520,31 @@ QInputDialog {
     background-color: #1E1C19;
 }
 
+/* --- Menu (context menus, dropdowns) --- */
+QMenu {
+    background-color: #2C2520;
+    color: #F5F1E6;
+    border: 1px solid #3E3530;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 7px 20px 7px 12px;
+    border-radius: 3px;
+}
+
+QMenu::item:selected {
+    background-color: #B88647;
+    color: #1A1510;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #3A3530;
+    margin: 4px 6px;
+}
+
 /* --- Tooltip --- */
 QToolTip {
     background-color: #2D2824;
@@ -493,6 +560,120 @@ QFrame#separator {
     background-color: #3A3530;
     max-height: 1px;
     min-height: 1px;
+    border: none;
+}
+
+/* --- Utility text labels --- */
+QLabel#text-muted {
+    color: #A09888;
+    font-size: 12px;
+    background: transparent;
+}
+
+QLabel#text-dim {
+    color: #6A6255;
+    font-size: 13px;
+    background: transparent;
+}
+
+QLabel#text-faint {
+    color: #5A5550;
+    font-size: 12px;
+    background: transparent;
+}
+
+QLabel#stock-warn {
+    color: #E74C3C;
+    font-size: 11px;
+    background: transparent;
+}
+
+QLabel#stock-ok {
+    color: #6A6255;
+    font-size: 11px;
+    background: transparent;
+}
+
+QLabel#batch-header {
+    color: #D4A365;
+    font-size: 12px;
+    font-weight: bold;
+    background: transparent;
+    padding: 4px 0;
+}
+
+/* --- Info panel (grouped info card) --- */
+QFrame#info-panel {
+    background: #2A2620;
+    border: 1px solid #3A3530;
+    border-radius: 6px;
+}
+
+/* --- Filter bar --- */
+QFrame#filter-bar {
+    background: #2A2620;
+    border: 1px solid #3A3530;
+    border-radius: 4px;
+}
+
+QFrame#filter-bar QLabel,
+QFrame#filter-bar QLineEdit,
+QFrame#filter-bar QDateEdit,
+QFrame#filter-bar QDoubleSpinBox,
+QFrame#filter-bar QComboBox,
+QFrame#filter-bar QPushButton {
+    font-size: 11px;
+}
+
+/* --- Option row (option picker dialog) --- */
+QWidget#option-row {
+    background-color: #252220;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QLabel#option-name {
+    font-size: 14px;
+    font-weight: bold;
+    background: transparent;
+}
+
+/* --- Flat icon button (transparent, hover subtle bg) --- */
+QPushButton#btn-icon {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: 0;
+    min-width: 0;
+    font-weight: normal;
+}
+
+QPushButton#btn-icon:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+QPushButton#btn-icon:pressed {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* Bordered variant of btn-icon (e.g. top-right menu trigger) */
+QPushButton#btn-icon-bordered {
+    background: transparent;
+    border: 1px solid #3E3530;
+    border-radius: 4px;
+    padding: 0;
+    min-height: 0;
+    min-width: 0;
+    font-weight: normal;
+}
+
+QPushButton#btn-icon-bordered:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+QPushButton#btn-icon-bordered:pressed {
+    background: rgba(255, 255, 255, 0.14);
 }
 
 /* --- Category list (POS) --- */
@@ -542,4 +723,132 @@ QTableWidget#cart-table {
 QTableWidget#cart-table::item {
     padding: 8px 10px;
     font-size: 13px;
+}
+
+/* --- Cart row widgets (spin + action buttons) --- */
+QSpinBox#cart-qty {
+    background-color: #1A1714;
+    color: #F5F1E6;
+    border: 1px solid #3A3530;
+    border-radius: 3px;
+    padding: 4px 6px;
+    min-height: 24px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QSpinBox#cart-qty:hover {
+    border-color: #B88647;
+}
+
+QSpinBox#cart-qty::up-button,
+QSpinBox#cart-qty::down-button {
+    background-color: #3A3530;
+    border: none;
+    width: 20px;
+}
+
+QSpinBox#cart-qty::up-button:hover,
+QSpinBox#cart-qty::down-button:hover {
+    background-color: #B88647;
+}
+
+QPushButton#btn-cart-edit {
+    background-color: transparent;
+    color: #D4A365;
+    border: none;
+    padding: 0;
+    font-size: 14px;
+    min-height: 0;
+    font-weight: normal;
+}
+
+QPushButton#btn-cart-edit:hover {
+    background-color: #2D2824;
+    color: #F5F1E6;
+    border-radius: 4px;
+}
+
+QPushButton#btn-cart-remove {
+    background-color: transparent;
+    color: #C0392B;
+    border: none;
+    padding: 0;
+    font-size: 14px;
+    min-height: 0;
+    font-weight: normal;
+}
+
+QPushButton#btn-cart-remove:hover {
+    background-color: #2D2824;
+    color: #E74C3C;
+    border-radius: 4px;
+}
+
+/* --- Dialog section header (small bold label) --- */
+QLabel#dialog-section {
+    color: #B88647;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 4px 0 2px 0;
+    letter-spacing: 0.5px;
+}
+
+/* --- Ingredient tag list (item edit dialog) --- */
+QListWidget#ingredient-tags {
+    background-color: #1A1714;
+    border: 1px solid #3A3530;
+    border-radius: 4px;
+    color: #F5F1E6;
+    font-size: 13px;
+    padding: 4px;
+}
+
+QListWidget#ingredient-tags::item {
+    padding: 4px 8px;
+    border-bottom: 1px solid #2D2824;
+}
+
+QListWidget#ingredient-tags::item:selected {
+    background-color: #3D321F;
+    color: #D4A365;
+}
+
+/* --- CheckBox / RadioButton (dialogs) --- */
+QCheckBox, QRadioButton {
+    color: #F5F1E6;
+    background: transparent;
+    spacing: 8px;
+    padding: 2px;
+    font-size: 13px;
+}
+
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    background-color: #252220;
+    border: 1px solid #3A3530;
+}
+
+QCheckBox::indicator {
+    border-radius: 3px;
+}
+
+QRadioButton::indicator {
+    border-radius: 8px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: #B88647;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #B88647;
+    border-color: #B88647;
+    image: none;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #252220;
+    border: 5px solid #B88647;
 }

@@ -214,6 +214,52 @@ class ApiClient:
             print(f"Error fetching last order ID: {e}")
             return 0
 
+    def add_order_items(self, order_id, items):
+        try:
+            response = httpx.post(
+                f"{self.base_url}/orders/{order_id}/items",
+                json={"items": items},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error adding items to order: {e}")
+            return None
+
+    # ==========================================
+    # USERS
+    # ==========================================
+
+    def get_users(self):
+        try:
+            tok = self._get_admin_token()
+            if not tok:
+                return []
+            response = httpx.get(
+                f"{self.base_url}/users/",
+                headers={"Authorization": f"Bearer {tok}"},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error fetching users: {e}")
+            return []
+
+    def _get_admin_token(self):
+        try:
+            res = httpx.post(
+                f"{self.base_url}/auth/login",
+                json={"username": "admin"},
+                timeout=self.timeout,
+            )
+            if res.status_code == 200:
+                return res.json().get("access_token")
+        except Exception:
+            pass
+        return None
+
     def update_order_status(self, order_id, status):
         try:
             response = httpx.put(
@@ -225,4 +271,30 @@ class ApiClient:
             return response.json()
         except Exception as e:
             print(f"Error updating order status: {e}")
+            return None
+
+    # ==========================================
+    # INGREDIENTS
+    # ==========================================
+
+    def get_ingredients(self):
+        try:
+            response = httpx.get(f"{self.base_url}/ingredients/", timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error fetching ingredients: {e}")
+            return []
+
+    def set_item_ingredients(self, item_id, ingredient_names):
+        try:
+            response = httpx.put(
+                f"{self.base_url}/items/{item_id}/ingredients",
+                json={"ingredient_names": ingredient_names},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error setting item ingredients: {e}")
             return None

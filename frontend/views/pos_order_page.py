@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QLabel, QMessageBox,
-                               QHeaderView, QInputDialog, QComboBox, QDialog, QFrame,
-                               QTimeEdit, QLineEdit, QSpinBox)
+                               QHeaderView, QComboBox, QDialog, QFrame,
+                               QTimeEdit, QLineEdit, QSpinBox, QCheckBox,
+                               QRadioButton, QButtonGroup, QScrollArea)
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
@@ -10,6 +11,184 @@ from datetime import datetime
 
 from views.order_type_dialog import OrderTypeDialog
 from views.option_picker_dialog import OptionPickerDialog
+
+
+_BASE_NAMES = {"tomate", "crème fraîche"}
+
+
+def _format_modifications_display(mods):
+    if not mods:
+        return ""
+    parts = []
+    for m in mods:
+        t = m.get("modification_type", "")
+        n = m.get("ingredient_name", "?")
+        if t == "base_change":
+            parts.append(f"base {n}")
+        elif t == "remove":
+            parts.append(f"−{n}")
+        elif t == "add":
+            parts.append(f"+{n}")
+    return ", ".join(parts)
+
+
+class CartEditDialog(QDialog):
+    """Edit comment and ingredient modifications for an existing cart row."""
+
+    def __init__(self, item_data, all_ingredients, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Modifier — {item_data.get('name', '')}")
+        self.setMinimumWidth(420)
+
+        item_ingr = item_data.get("ingredients") or []
+        initial_mods = item_data.get("modifications") or []
+
+        self._item_ingr = item_ingr
+        self._all_ingr = all_ingredients
+        self._current_base_id = None
+        self._base_group = None
+        self._removal_checks = {}
+        self._supp_checks = {}
+
+        root = QVBoxLayout(self)
+        root.setSpacing(12)
+        root.setContentsMargins(20, 16, 20, 16)
+
+        # Comment
+        root.addWidget(QLabel("Commentaire :"))
+        self._comment = QLineEdit(item_data.get("comment") or "")
+        self._comment.setPlaceholderText("Notes pour la cuisine…")
+        root.addWidget(self._comment)
+
+        # Ingredient modifications (only if item has ingredients)
+        if item_ingr:
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            root.addWidget(sep)
+
+            # Decode initial state
+            initial_base_id = None
+            initial_removed = set()
+            initial_added = set()
+            for m in initial_mods:
+                t = m.get("modification_type")
+                iid = m.get("ingredient_id")
+                if t == "base_change":
+                    initial_base_id = iid
+                elif t == "remove":
+                    initial_removed.add(iid)
+                elif t == "add":
+                    initial_added.add(iid)
+
+            scroll_w = QWidget()
+            sv = QVBoxLayout(scroll_w)
+            sv.setSpacing(12)
+            sv.setContentsMargins(0, 0, 0, 0)
+
+            # Base toggle
+            base_in_item = [i for i in item_ingr if i["name"].lower() in _BASE_NAMES]
+            if base_in_item:
+                self._current_base_id = base_in_item[0]["id"]
+                lbl = QLabel("Base :")
+                lbl.setObjectName("dialog-section")
+                sv.addWidget(lbl)
+                base_row = QHBoxLayout()
+                self._base_group = QButtonGroup(self)
+                all_bases = [i for i in all_ingredients if i["name"].lower() in _BASE_NAMES]
+                for ing in all_bases:
+                    rb = QRadioButton(ing["name"])
+                    rb.setProperty("ing_id", ing["id"])
+                    rb.setProperty("ing_name", ing["name"])
+                    if initial_base_id is not None:
+                        rb.setChecked(ing["id"] == initial_base_id)
+                    else:
+                        rb.setChecked(ing["id"] == self._current_base_id)
+                    self._base_group.addButton(rb)
+                    base_row.addWidget(rb)
+                base_row.addStretch()
+                sv.addLayout(base_row)
+
+            # Retraits
+            non_base = [i for i in item_ingr if i["name"].lower() not in _BASE_NAMES]
+            if non_base:
+                lbl2 = QLabel("Retraits (décochez pour retirer) :")
+                lbl2.setObjectName("dialog-section")
+                sv.addWidget(lbl2)
+                grid = QHBoxLayout()
+                c1 = QVBoxLayout(); c1.setSpacing(4)
+                c2 = QVBoxLayout(); c2.setSpacing(4)
+                for idx, ingr in enumerate(non_base):
+                    cb = QCheckBox(ingr["name"])
+                    cb.setChecked(ingr["id"] not in initial_removed)
+                    self._removal_checks[ingr["id"]] = {"cb": cb, "name": ingr["name"]}
+                    (c1 if idx % 2 == 0 else c2).addWidget(cb)
+                grid.addLayout(c1); grid.addLayout(c2); grid.addStretch()
+                sv.addLayout(grid)
+
+            # Suppléments
+            item_ingr_ids = {i["id"] for i in item_ingr}
+            supp_ingr = [
+                i for i in all_ingredients
+                if i["id"] not in item_ingr_ids and i["name"].lower() not in _BASE_NAMES
+            ]
+            if supp_ingr:
+                lbl3 = QLabel("Supplément +1€ (cochez pour ajouter) :")
+                lbl3.setObjectName("dialog-section")
+                sv.addWidget(lbl3)
+                sgrid = QHBoxLayout()
+                sc1 = QVBoxLayout(); sc1.setSpacing(4)
+                sc2 = QVBoxLayout(); sc2.setSpacing(4)
+                for idx, ingr in enumerate(supp_ingr):
+                    cb = QCheckBox(f"{ingr['name']} (+1€)")
+                    cb.setChecked(ingr["id"] in initial_added)
+                    self._supp_checks[ingr["id"]] = {"cb": cb, "name": ingr["name"]}
+                    (sc1 if idx % 2 == 0 else sc2).addWidget(cb)
+                sgrid.addLayout(sc1); sgrid.addLayout(sc2); sgrid.addStretch()
+                sv.addLayout(sgrid)
+
+            sv.addStretch()
+            scroll = QScrollArea()
+            scroll.setWidget(scroll_w)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setMaximumHeight(360)
+            root.addWidget(scroll)
+
+        # Buttons
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.setObjectName("btn-secondary")
+        btn_cancel.clicked.connect(self.reject)
+        btns.addWidget(btn_cancel)
+        btn_ok = QPushButton("Valider")
+        btn_ok.clicked.connect(self.accept)
+        btns.addWidget(btn_ok)
+        root.addLayout(btns)
+
+    def get_comment(self):
+        t = self._comment.text().strip()
+        return t if t else None
+
+    def get_modifications(self):
+        mods = []
+        if self._base_group and self._current_base_id is not None:
+            checked = self._base_group.checkedButton()
+            if checked:
+                new_id = checked.property("ing_id")
+                if new_id != self._current_base_id:
+                    mods.append({
+                        "ingredient_id": new_id,
+                        "modification_type": "base_change",
+                        "ingredient_name": checked.property("ing_name"),
+                    })
+        for iid, info in self._removal_checks.items():
+            if not info["cb"].isChecked():
+                mods.append({"ingredient_id": iid, "modification_type": "remove", "ingredient_name": info["name"]})
+        for iid, info in self._supp_checks.items():
+            if info["cb"].isChecked():
+                mods.append({"ingredient_id": iid, "modification_type": "add", "ingredient_name": info["name"]})
+        return mods if mods else None
 
 
 class PosOrderPage(QWidget):
@@ -22,6 +201,8 @@ class PosOrderPage(QWidget):
 
         self.order_type = "eat_in"
         self.seating_location = None
+        self._current_order = None
+        self._all_ingredients = []
 
         self.init_ui()
         self.refresh_data()
@@ -144,7 +325,6 @@ class PosOrderPage(QWidget):
         self.pickup_time_edit.setDisplayFormat("HH:mm")
         self.pickup_time_edit.setTime(QTime.currentTime().addSecs(1800))
         self.pickup_time_edit.setMinimumHeight(30)
-        self.pickup_time_edit.setStyleSheet("font-size: 14px;")
         row2_pickup.addWidget(self.pickup_time_edit)
         row2_pickup.addStretch()
         takeaway_layout.addLayout(row2_pickup)
@@ -160,13 +340,11 @@ class PosOrderPage(QWidget):
         self.spin_table = QSpinBox()
         self.spin_table.setRange(1, 200)
         self.spin_table.setMinimumHeight(30)
-        self.spin_table.setStyleSheet("font-size: 14px;")
         eatin_layout.addWidget(self.spin_table)
         eatin_layout.addWidget(QLabel("Couverts :"))
         self.spin_covers = QSpinBox()
         self.spin_covers.setRange(1, 50)
         self.spin_covers.setMinimumHeight(30)
-        self.spin_covers.setStyleSheet("font-size: 14px;")
         eatin_layout.addWidget(self.spin_covers)
         eatin_layout.addStretch()
 
@@ -175,16 +353,19 @@ class PosOrderPage(QWidget):
         self.eatin_widget.setVisible(False)
         right_panel.addWidget(self.eatin_widget)
 
-        self.cart_list = QTableWidget(0, 3)
+        self.cart_list = QTableWidget(0, 4)
         self.cart_list.setObjectName("cart-table")
-        self.cart_list.setHorizontalHeaderLabels(["Article", "Qte", "Prix"])
+        self.cart_list.setHorizontalHeaderLabels(["Article", "Qté", "Prix", ""])
         self.cart_list.verticalHeader().hide()
+        self.cart_list.verticalHeader().setDefaultSectionSize(38)
         self.cart_list.setShowGrid(False)
         self.cart_list.setAlternatingRowColors(True)
         self.cart_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.cart_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.cart_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self.cart_list.setColumnWidth(1, 82)
         self.cart_list.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.cart_list.itemDoubleClicked.connect(self.edit_row_comment)
+        self.cart_list.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        self.cart_list.setColumnWidth(3, 66)
         right_panel.addWidget(self.cart_list)
 
         self.cart_total_label = QLabel("Total : 0.00 €")
@@ -195,24 +376,34 @@ class PosOrderPage(QWidget):
         actions_layout = QVBoxLayout()
         actions_layout.setSpacing(8)
 
-        btn_kitchen = QPushButton("Envoyer en cuisine")
-        btn_kitchen.setObjectName("btn-kitchen")
-        btn_kitchen.setCursor(Qt.PointingHandCursor)
-        btn_kitchen.clicked.connect(self.send_to_kitchen)
-        actions_layout.addWidget(btn_kitchen)
+        self.btn_kitchen = QPushButton("Envoyer en cuisine")
+        self.btn_kitchen.setObjectName("btn-kitchen")
+        self.btn_kitchen.setCursor(Qt.PointingHandCursor)
+        self.btn_kitchen.clicked.connect(self.send_to_kitchen)
+        actions_layout.addWidget(self.btn_kitchen)
+
+        self.btn_invoice = QPushButton("Facturer")
+        self.btn_invoice.setObjectName("btn-invoice")
+        self.btn_invoice.setCursor(Qt.PointingHandCursor)
+        self.btn_invoice.clicked.connect(self._invoice_order)
+        self.btn_invoice.setVisible(False)
+        actions_layout.addWidget(self.btn_invoice)
 
         row2 = QHBoxLayout()
         row2.setSpacing(8)
 
-        btn_invoice = QPushButton("Facturer")
-        btn_invoice.setObjectName("btn-invoice")
-        btn_invoice.setCursor(Qt.PointingHandCursor)
-        row2.addWidget(btn_invoice)
+        self.btn_new_order = QPushButton("Nouvelle commande")
+        self.btn_new_order.setObjectName("btn-secondary")
+        self.btn_new_order.setCursor(Qt.PointingHandCursor)
+        self.btn_new_order.clicked.connect(self._reset_order)
+        self.btn_new_order.setVisible(False)
+        row2.addWidget(self.btn_new_order)
 
-        btn_cancel = QPushButton("Annuler")
-        btn_cancel.setObjectName("btn-cancel-order")
-        btn_cancel.setCursor(Qt.PointingHandCursor)
-        row2.addWidget(btn_cancel)
+        self.btn_cancel = QPushButton("Annuler")
+        self.btn_cancel.setObjectName("btn-cancel-order")
+        self.btn_cancel.setCursor(Qt.PointingHandCursor)
+        self.btn_cancel.clicked.connect(self._cancel_order)
+        row2.addWidget(self.btn_cancel)
 
         actions_layout.addLayout(row2)
         right_panel.addLayout(actions_layout)
@@ -225,6 +416,7 @@ class PosOrderPage(QWidget):
         try:
             categories_list = self.api.get_categories()
             self.categories_data = {cat["name"]: cat["items"] for cat in categories_list}
+            self._all_ingredients = self.api.get_ingredients()
             self.load_categories()
         except Exception as e:
             QMessageBox.critical(self, "Erreur API", f"Impossible de charger les donnees : {e}")
@@ -243,11 +435,12 @@ class PosOrderPage(QWidget):
 
         item_data["comment"] = None
         item_data["selected_options"] = None
+        item_data["modifications"] = None
 
         options = item_data.get("options", [])
 
         if options:
-            available_options = [o for o in options if o["stock_quantity"] > 0]
+            available_options = [o for o in options if o["stock_quantity"] is None or o["stock_quantity"] > 0]
             if not available_options:
                 QMessageBox.warning(self, "Rupture", f"Toutes les options de « {item_data['name']} » sont en rupture.")
                 return
@@ -266,6 +459,24 @@ class PosOrderPage(QWidget):
         else:
             qty = 1
 
+        # Clé de correspondance : même article + mêmes options
+        def _options_key(opts):
+            if not opts:
+                return ()
+            return tuple(sorted((o["item_option_id"], o["quantity"]) for o in opts))
+
+        new_key = (item_data["id"], _options_key(item_data.get("selected_options")))
+        for r in range(self.cart_list.rowCount()):
+            existing = self.cart_list.item(r, 0).data(Qt.UserRole)
+            if existing and not existing.get("comment") and not existing.get("modifications"):
+                exist_key = (existing["id"], _options_key(existing.get("selected_options")))
+                if exist_key == new_key:
+                    spin = self.cart_list.cellWidget(r, 1)
+                    if spin:
+                        spin.setValue(spin.value() + qty)
+                    self.update_total()
+                    return
+
         cart_row = self.cart_list.rowCount()
         self.cart_list.insertRow(cart_row)
 
@@ -279,15 +490,20 @@ class PosOrderPage(QWidget):
         name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
         self.cart_list.setItem(cart_row, 0, name_item)
 
-        qty_item = QTableWidgetItem(str(qty))
-        qty_item.setFlags(qty_item.flags() & ~Qt.ItemIsEditable)
-        qty_item.setTextAlignment(Qt.AlignCenter)
-        self.cart_list.setItem(cart_row, 1, qty_item)
+        spin = QSpinBox()
+        spin.setObjectName("cart-qty")
+        spin.setRange(1, 99)
+        spin.setValue(qty)
+        spin.setAlignment(Qt.AlignCenter)
+        spin.valueChanged.connect(self.update_total)
+        self.cart_list.setCellWidget(cart_row, 1, spin)
 
         price_item = QTableWidgetItem(f"{float(item_data['price']):.2f}")
         price_item.setFlags(price_item.flags() & ~Qt.ItemIsEditable)
         price_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.cart_list.setItem(cart_row, 2, price_item)
+
+        self.cart_list.setCellWidget(cart_row, 3, self._make_cart_action_widget())
 
         self.update_total()
 
@@ -295,35 +511,11 @@ class PosOrderPage(QWidget):
         new_total = 0.0
         for row in range(self.cart_list.rowCount()):
             price_item = self.cart_list.item(row, 2)
-            qty_item = self.cart_list.item(row, 1)
-            if price_item and qty_item:
-                price = float(price_item.text())
-                qty = int(qty_item.text())
-                new_total += (price * qty)
-
+            spin = self.cart_list.cellWidget(row, 1)
+            if price_item and spin:
+                new_total += float(price_item.text()) * spin.value()
         self.cart_total = new_total
         self.cart_total_label.setText(f"Total : {self.cart_total:.2f} €")
-
-    def edit_row_comment(self, item):
-        if item.tableWidget() != self.cart_list:
-            return
-
-        row = item.row()
-        item_widget = self.cart_list.item(row, 0)
-        item_data = item_widget.data(Qt.UserRole)
-
-        text, ok = QInputDialog.getText(self, "Commentaire", "Entrez un commentaire :",
-                                        text=item_data.get("comment") or "")
-        if ok:
-            item_data["comment"] = text
-            display_name = item_data["name"]
-            if item_data.get("selected_options"):
-                details = self._format_selected_options_display(item_data["selected_options"])
-                display_name = f"{item_data['name']} ({details})"
-            if text:
-                display_name += f" [{text}]"
-            item_widget.setText(display_name)
-            item_widget.setData(Qt.UserRole, item_data)
 
     def load_categories(self):
         self.cat_table.setRowCount(0)
@@ -363,6 +555,77 @@ class PosOrderPage(QWidget):
             price_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.items_table.setItem(row, 2, price_item)
 
+    def _make_cart_action_widget(self):
+        w = QWidget()
+        w.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(w)
+        h.setContentsMargins(2, 0, 2, 0)
+        h.setSpacing(2)
+
+        def get_row():
+            for r in range(self.cart_list.rowCount()):
+                if self.cart_list.cellWidget(r, 3) is w:
+                    return r
+            return -1
+
+        btn_edit = QPushButton("✏")
+        btn_edit.setObjectName("btn-cart-edit")
+        btn_edit.setFixedSize(28, 28)
+        btn_edit.setCursor(Qt.PointingHandCursor)
+        btn_edit.setToolTip("Modifier")
+        btn_edit.clicked.connect(lambda: self._edit_cart_row(get_row()))
+        h.addWidget(btn_edit)
+
+        btn_rm = QPushButton("✕")
+        btn_rm.setObjectName("btn-cart-remove")
+        btn_rm.setFixedSize(28, 28)
+        btn_rm.setCursor(Qt.PointingHandCursor)
+        btn_rm.setToolTip("Retirer")
+        btn_rm.clicked.connect(lambda: self._remove_cart_row(get_row()))
+        h.addWidget(btn_rm)
+
+        return w
+
+    def _edit_cart_row(self, row):
+        if row < 0:
+            return
+        name_item = self.cart_list.item(row, 0)
+        if not name_item:
+            return
+        item_data = name_item.data(Qt.UserRole)
+
+        dlg = CartEditDialog(item_data, self._all_ingredients, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        item_data["comment"] = dlg.get_comment()
+        item_data["modifications"] = dlg.get_modifications()
+
+        display_name = item_data["name"]
+        if item_data.get("selected_options"):
+            details = self._format_selected_options_display(item_data["selected_options"])
+            display_name = f"{item_data['name']} ({details})"
+        if item_data.get("modifications"):
+            display_name += f" [{_format_modifications_display(item_data['modifications'])}]"
+        if item_data.get("comment"):
+            display_name += f" [{item_data['comment']}]"
+
+        name_item.setText(display_name)
+        name_item.setData(Qt.UserRole, item_data)
+
+        supp_cost = sum(1.0 for m in (item_data.get("modifications") or []) if m.get("modification_type") == "add")
+        unit_price = float(item_data["price"]) + supp_cost
+        price_item = self.cart_list.item(row, 2)
+        if price_item:
+            price_item.setText(f"{unit_price:.2f}")
+
+        self.update_total()
+
+    def _remove_cart_row(self, row):
+        if row >= 0:
+            self.cart_list.removeRow(row)
+            self.update_total()
+
     def _build_order_payload(self):
         order_items = []
         items_to_print = []
@@ -371,8 +634,8 @@ class PosOrderPage(QWidget):
             item_widget = self.cart_list.item(row, 0)
             item_data = item_widget.data(Qt.UserRole)
 
-            qty_item = self.cart_list.item(row, 1)
-            qty = int(qty_item.text()) if qty_item else 1
+            spin = self.cart_list.cellWidget(row, 1)
+            qty = spin.value() if spin else 1
 
             api_selected_options = None
             if item_data.get("selected_options"):
@@ -381,10 +644,18 @@ class PosOrderPage(QWidget):
                     for o in item_data["selected_options"]
                 ]
 
+            api_modifications = None
+            if item_data.get("modifications"):
+                api_modifications = [
+                    {"ingredient_id": m["ingredient_id"], "modification_type": m["modification_type"]}
+                    for m in item_data["modifications"]
+                ]
+
             order_items.append({
                 "item_id": item_data["id"],
                 "quantity": qty,
                 "selected_options": api_selected_options,
+                "modifications": api_modifications,
                 "comment": item_data.get("comment"),
             })
 
@@ -397,6 +668,7 @@ class PosOrderPage(QWidget):
             items_to_print.append({
                 "name": item_data.get("name"),
                 "selected_options": item_data.get("selected_options"),
+                "modifications": item_data.get("modifications"),
                 "comment": item_data.get("comment"),
                 "quantity": qty,
                 "category": cat_name
@@ -441,7 +713,7 @@ class PosOrderPage(QWidget):
             QMessageBox.critical(self, "Erreur", "Impossible de creer la commande.")
             return
 
-        self.api.update_order_status(result["id"], "in_kitchen")
+        self._current_order = result
 
         categorized_items = defaultdict(list)
         for item in items_to_print:
@@ -457,10 +729,127 @@ class PosOrderPage(QWidget):
 
         sorted_categories = sorted(categorized_items.keys(), key=get_category_priority)
 
+        self._set_post_order_mode(True)
         self.print_kitchen_ticket(result, categorized_items, sorted_categories)
 
+    def _set_post_order_mode(self, active: bool):
+        self.btn_kitchen.setVisible(not active)
+        self.btn_invoice.setVisible(active)
+        self.btn_new_order.setVisible(active)
+        self.cat_table.setEnabled(not active)
+        self.items_table.setEnabled(not active)
+        self.cart_list.setEnabled(not active)
+
+    def _reset_order(self):
+        self._current_order = None
         self.cart_list.setRowCount(0)
         self.update_total()
+        self._set_post_order_mode(False)
+        self.setup_new_order()
+
+    def _cancel_order(self):
+        if self._current_order:
+            if not QMessageBox.question(
+                self, "Annuler la commande",
+                f"Annuler la commande #{self._current_order['id']} ?",
+                QMessageBox.Yes | QMessageBox.No
+            ) == QMessageBox.Yes:
+                return
+            self.api.update_order_status(self._current_order["id"], "cancelled")
+        self._current_order = None
+        self.cart_list.setRowCount(0)
+        self.update_total()
+        self._set_post_order_mode(False)
+        self.setup_new_order()
+
+    def _invoice_order(self):
+        if not self._current_order:
+            return
+        order_id = self._current_order["id"]
+        self.api.update_order_status(order_id, "paid")
+
+        order = self._current_order
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        type_labels = {"eat_in": "SUR PLACE", "take_away": "A EMPORTER"}
+        seating_labels = {"indoor": "Salle", "outdoor": "Terrasse"}
+
+        info_lines = [
+            f"<b>Commande :</b> #{order_id}",
+            f"<b>Type :</b> {type_labels.get(order.get('order_type', ''), '')}",
+        ]
+        if order.get("seating_location"):
+            info_lines.append(f"<b>Emplacement :</b> {seating_labels.get(order['seating_location'], '')}")
+        if order.get("table_number"):
+            info_lines.append(f"<b>Table :</b> {order['table_number']}")
+        if order.get("covers"):
+            info_lines.append(f"<b>Couverts :</b> {order['covers']}")
+        if order.get("pickup_time"):
+            info_lines.append(f"<b>Retrait :</b> {order['pickup_time']}")
+        if order.get("customer_name"):
+            info_lines.append(f"<b>Client :</b> {order['customer_name']}")
+        if order.get("customer_phone"):
+            info_lines.append(f"<b>Tel :</b> {order['customer_phone']}")
+        info_html = "<br>".join(info_lines)
+
+        rows_html = ""
+        items_data = order.get("items", [])
+        categorized: dict = {}
+        for it in items_data:
+            cat = "AUTRES"
+            name = it.get("item_name_snapshot", "")
+            for c_name, c_items in self.categories_data.items():
+                if any(ci.get("name") == name for ci in c_items):
+                    cat = c_name.upper()
+                    break
+            categorized.setdefault(cat, []).append(it)
+
+        total = 0.0
+        for cat, c_items in categorized.items():
+            rows_html += f'<tr><td colspan="3" class="cat">{cat}</td></tr>'
+            for it in c_items:
+                name = it.get("item_name_snapshot", "")
+                opts = it.get("selected_options", [])
+                if opts:
+                    opts_str = ", ".join(o.get("option_name_snapshot", "") for o in opts)
+                    name += f" <span class='opt'>({opts_str})</span>"
+                qty = it.get("quantity", 1)
+                up = float(it.get("unit_price") or 0)
+                supp = sum(
+                    float(m.get("unit_price") or 0)
+                    for m in (it.get("modifications") or [])
+                    if m.get("modification_type") == "add"
+                )
+                line = qty * (up + supp)
+                total += line
+                rows_html += f'<tr><td>{name}</td><td class="r">{qty}</td><td class="r">{line:.2f} €</td></tr>'
+
+        html = f"""<html><head><style>
+            body {{ font-family: Arial, sans-serif; font-size: 8pt; color: #000; margin: 0; padding: 0; }}
+            .receipt {{ max-width: 72mm; margin: 0 auto; }}
+            .header {{ text-align: center; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }}
+            .header h2 {{ font-size: 12pt; margin: 0; letter-spacing: 1px; }}
+            .header p {{ font-size: 7pt; margin: 1px 0 0 0; }}
+            .info {{ font-size: 7pt; padding: 2px 0; border-bottom: 1px solid #000; margin-bottom: 3px; line-height: 1.3; }}
+            .date {{ font-size: 7pt; text-align: right; margin-bottom: 2px; }}
+            table {{ width: 100%; border-collapse: collapse; }}
+            .cat {{ font-weight: bold; font-size: 7pt; text-transform: uppercase; padding: 2px 3px; border-top: 1px solid #000; }}
+            td {{ padding: 1px 3px; font-size: 8pt; line-height: 1.2; }}
+            .r {{ text-align: right; white-space: nowrap; }}
+            .opt {{ font-size: 6pt; }}
+            .total {{ border-top: 2px solid #000; margin-top: 4px; padding-top: 3px; text-align: right; font-size: 11pt; font-weight: bold; }}
+            .footer {{ text-align: center; font-size: 7pt; margin-top: 6px; padding-top: 3px; border-top: 1px dashed #000; }}
+        </style></head><body>
+        <div class="receipt">
+            <div class="header"><h2>SAN GIORGIO</h2><p>Pizzeria - Restaurant Italien</p></div>
+            <div class="date">{now}</div>
+            <div class="info">{info_html}</div>
+            <table>{rows_html}</table>
+            <div class="total">TOTAL : {total:.2f} €</div>
+            <div class="footer">Merci de votre visite !<br>A bientot chez San Giorgio</div>
+        </div></body></html>"""
+
+        self._print_html(html)
+        self._reset_order()
 
     def _print_html(self, html):
         printer = QPrinter(QPrinter.HighResolution)
@@ -496,35 +885,6 @@ class PosOrderPage(QWidget):
                 lines.append(f"<div>{name}</div>")
         return "\n".join(lines)
 
-    def _get_invoice_info(self, order_id):
-        type_labels = {"eat_in": "SUR PLACE", "take_away": "A EMPORTER"}
-        seating_labels = {"indoor": "Salle", "outdoor": "Terrasse"}
-
-        info_lines = [
-            f"<b>Commande :</b> #{order_id}",
-            f"<b>Type :</b> {type_labels.get(self.order_type, self.order_type)}",
-        ]
-        if self.seating_location:
-            info_lines.append(f"<b>Emplacement :</b> {seating_labels.get(self.seating_location, '')}")
-        if self.order_type == "eat_in":
-            info_lines.append(f"<b>Table :</b> {self.spin_table.value()}")
-            info_lines.append(f"<b>Couverts :</b> {self.spin_covers.value()}")
-        if self.order_type == "take_away":
-            pt = self.pickup_time_edit.time().toString("HH:mm")
-            info_lines.append(f"<b>Retrait :</b> {pt}")
-            name = self.customer_name_edit.text().strip()
-            phone = self.customer_phone_edit.text().strip()
-            if name:
-                info_lines.append(f"<b>Client :</b> {name}")
-            if phone:
-                info_lines.append(f"<b>Tel :</b> {phone}")
-        return "<br>".join(info_lines)
-
-    def _format_options_for_ticket(self, selected_options):
-        if not selected_options:
-            return ""
-        return ", ".join(f"{o['name']} x{o['quantity']}" for o in selected_options)
-
     def print_kitchen_ticket(self, result, categorized_items, sorted_categories):
         order_id = result.get("id", "")
         info_html = self._get_kitchen_info(order_id)
@@ -537,8 +897,18 @@ class PosOrderPage(QWidget):
             for item in categorized_items[cat]:
                 details = f"<b>{item['name']}</b>"
                 if item.get("selected_options"):
-                    opts = self._format_options_for_ticket(item["selected_options"])
+                    opts = self._format_selected_options_display(item["selected_options"])
                     details += f"<br><span class='opt'>{opts}</span>"
+                if item.get("modifications"):
+                    for mod in item["modifications"]:
+                        t = mod.get("modification_type", "")
+                        n = mod.get("ingredient_name", "?")
+                        if t == "base_change":
+                            details += f"<br><span class='mod-base'>Base : {n}</span>"
+                        elif t == "remove":
+                            details += f"<br><span class='mod-rm'>Retrait : {n}</span>"
+                        elif t == "add":
+                            details += f"<br><span class='mod-add'>Supplément : {n}</span>"
                 if item.get("comment"):
                     details += f"<br><i class='cmt'>{item['comment']}</i>"
 
@@ -555,6 +925,9 @@ class PosOrderPage(QWidget):
             .qty {{ font-weight: bold; font-size: 11pt; width: 15%; text-align: center; }}
             .opt {{ font-size: 7pt; }}
             .cmt {{ font-size: 7pt; color: #444; }}
+            .mod-base {{ font-size: 7pt; font-style: italic; color: #555; }}
+            .mod-rm {{ font-size: 7pt; color: #c00; font-weight: bold; }}
+            .mod-add {{ font-size: 7pt; color: #080; font-weight: bold; }}
         </style></head><body>
         <div class="receipt">
             <h2>BON DE CUISINE</h2>
@@ -565,66 +938,3 @@ class PosOrderPage(QWidget):
 
         if self._print_html(html):
             QMessageBox.information(self, "Cuisine", "Commande envoyee en cuisine avec succes !")
-
-    def print_invoice(self, result, categorized_items, sorted_categories):
-        order_id = result.get("id", "")
-        now = datetime.now().strftime("%d/%m/%Y %H:%M")
-        info_html = self._get_invoice_info(order_id)
-
-        rows_html = ""
-        for cat in sorted_categories:
-            rows_html += f'<tr><td colspan="3" class="cat">{cat}</td></tr>'
-
-            for item in categorized_items[cat]:
-                name = item["name"]
-                if item.get("selected_options"):
-                    opts = self._format_options_for_ticket(item["selected_options"])
-                    name += f" <span class='opt'>({opts})</span>"
-
-                qty = item["quantity"]
-                price = float(item.get("unit_price", 0))
-                line_total = qty * price
-
-                rows_html += f"""<tr>
-                    <td>{name}</td>
-                    <td class="r">{qty}</td>
-                    <td class="r">{line_total:.2f} €</td>
-                </tr>"""
-
-        total = sum(
-            item["quantity"] * float(item.get("unit_price", 0))
-            for items in categorized_items.values()
-            for item in items
-        )
-
-        html = f"""<html><head><style>
-            body {{ font-family: Arial, sans-serif; font-size: 8pt; color: #000; margin: 0; padding: 0; }}
-            .receipt {{ max-width: 72mm; margin: 0 auto; }}
-            .header {{ text-align: center; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }}
-            .header h2 {{ font-size: 12pt; margin: 0; letter-spacing: 1px; }}
-            .header p {{ font-size: 7pt; margin: 1px 0 0 0; }}
-            .info {{ font-size: 7pt; padding: 2px 0; border-bottom: 1px solid #000; margin-bottom: 3px; line-height: 1.3; }}
-            .date {{ font-size: 7pt; text-align: right; margin-bottom: 2px; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            .cat {{ font-weight: bold; font-size: 7pt; text-transform: uppercase; padding: 2px 3px; border-top: 1px solid #000; }}
-            td {{ padding: 1px 3px; font-size: 8pt; line-height: 1.2; }}
-            .r {{ text-align: right; white-space: nowrap; }}
-            .opt {{ font-size: 6pt; }}
-            .total {{ border-top: 2px solid #000; margin-top: 4px; padding-top: 3px; text-align: right; font-size: 11pt; font-weight: bold; }}
-            .footer {{ text-align: center; font-size: 7pt; margin-top: 6px; padding-top: 3px; border-top: 1px dashed #000; }}
-        </style></head><body>
-        <div class="receipt">
-            <div class="header">
-                <h2>SAN GIORGIO</h2>
-                <p>Pizzeria - Restaurant Italien</p>
-                <p>Saint-Georges-de-Mons</p>
-            </div>
-            <div class="date">{now}</div>
-            <div class="info">{info_html}</div>
-            <table>{rows_html}</table>
-            <div class="total">TOTAL : {total:.2f} €</div>
-            <div class="footer">Merci de votre visite !<br>A bientot chez San Giorgio</div>
-        </div>
-        </body></html>"""
-
-        self._print_html(html)

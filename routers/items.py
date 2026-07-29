@@ -2,10 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
+from pydantic import BaseModel
 import models
 import schemas
 import services
 from database import get_db
+
+
+class SetIngredientsRequest(BaseModel):
+    ingredient_names: List[str]
 
 router = APIRouter(
     prefix="/items",
@@ -105,6 +110,30 @@ def get_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found.")
+    return db_item
+
+
+@router.put("/{item_id}/ingredients", response_model=schemas.ItemRead)
+def set_item_ingredients(item_id: int, payload: SetIngredientsRequest, db: Session = Depends(get_db)):
+    db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    db.query(models.ItemIngredient).filter(models.ItemIngredient.item_id == item_id).delete()
+
+    for raw_name in payload.ingredient_names:
+        name = raw_name.strip()
+        if not name:
+            continue
+        ingredient = db.query(models.Ingredient).filter(models.Ingredient.name == name).first()
+        if not ingredient:
+            ingredient = models.Ingredient(name=name)
+            db.add(ingredient)
+            db.flush()
+        db.add(models.ItemIngredient(item_id=item_id, ingredient_id=ingredient.id))
+
+    db.commit()
+    db.refresh(db_item)
     return db_item
 
 

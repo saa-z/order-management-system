@@ -3,7 +3,71 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
-from models import OrderStatus, OrderType, SeatingLocation
+from models import OrderStatus, OrderType, SeatingLocation, UserRole
+
+
+# ==========================================
+# 0. USERS & AUTH
+# ==========================================
+
+class UserCreate(BaseModel):
+    username: str
+    role: UserRole = UserRole.SERVER
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    role: Optional[UserRole] = None
+
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    role: UserRole
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LoginRequest(BaseModel):
+    username: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
+
+
+# ==========================================
+# 0b. INGREDIENTS
+# ==========================================
+
+class IngredientCreate(BaseModel):
+    name: str
+
+
+class IngredientRead(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# 0c. ORDER ITEM MODIFICATIONS
+# ==========================================
+
+class OrderItemModificationCreate(BaseModel):
+    ingredient_id: int
+    modification_type: str  # "remove", "add", "base_change"
+
+
+class OrderItemModificationRead(BaseModel):
+    id: int
+    ingredient_id: int
+    modification_type: str
+    unit_price: Decimal
+    ingredient_name_snapshot: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
@@ -61,6 +125,7 @@ class ItemRead(ItemBase):
     id: int
     is_in_stock: bool = True
     options: List[ItemOptionRead] = []
+    ingredients: List[IngredientRead] = []
     created_at: Optional[datetime] = None
     modified_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
@@ -98,6 +163,7 @@ class OrderItemBase(BaseModel):
     quantity: int = 1
     comment: Optional[str] = None
     selected_options: Optional[List[OrderItemOptionCreate]] = None
+    modifications: Optional[List[OrderItemModificationCreate]] = None
 
 
 class OrderItemCreate(OrderItemBase):
@@ -112,8 +178,10 @@ class OrderItemRead(BaseModel):
     comment: Optional[str] = None
     unit_price: Decimal = Decimal("0.00")
     item_name_snapshot: Optional[str] = None
+    batch: int = 1
     item: ItemRead
     selected_options: List[OrderItemOptionRead] = []
+    modifications: List[OrderItemModificationRead] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -180,6 +248,7 @@ class OrderRead(OrderBase):
     created_at: datetime
     validated_at: Optional[datetime] = None
     items: List[OrderItemRead] = []
+    created_by: Optional[UserRead] = None
 
     model_config = ConfigDict(from_attributes=True)
 

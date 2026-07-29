@@ -3,11 +3,11 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QDialog,
     QFormLayout, QLineEdit, QDoubleSpinBox, QSpinBox, QCheckBox,
     QAbstractItemView, QMessageBox, QComboBox, QSizePolicy,
-    QScrollArea, QTabWidget, QFrame, QMenu,
+    QScrollArea, QTabWidget, QFrame, QMenu, QListWidget, QCompleter,
 )
 import qtawesome as qta
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QStringListModel
 from PySide6.QtGui import QColor, QFont, QPainter, QBrush
 
 
@@ -97,40 +97,18 @@ class ManageItemsPage(QWidget):
         top.addWidget(self.toggle_deleted)
 
         self._more_menu = QMenu(self)
-        self._more_menu.setStyleSheet("""
-            QMenu {
-                background-color: #2C2520;
-                color: #F5F1E6;
-                border: 1px solid #3E3530;
-                border-radius: 4px;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 7px 20px 7px 12px;
-                border-radius: 3px;
-            }
-            QMenu::item:selected {
-                background-color: #B88647;
-                color: #1A1510;
-            }
-        """)
         self._more_menu.addAction("Ajouter", self._top_add)
         self._more_menu.addAction("Modifier", self._top_edit)
         self._more_menu.addSeparator()
         self._more_menu.addAction("Supprimer", self._top_delete)
 
         btn_more = QPushButton()
+        btn_more.setObjectName("btn-icon-bordered")
         btn_more.setIcon(qta.icon("fa5s.ellipsis-h", color="#F5F1E6"))
         btn_more.setIconSize(QSize(16, 16))
         btn_more.setFixedSize(32, 32)
         btn_more.setCursor(Qt.PointingHandCursor)
         btn_more.setToolTip("Actions")
-        btn_more.setStyleSheet(
-            "QPushButton { background: transparent; border: 1px solid #3E3530;"
-            " border-radius: 4px; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.08); }"
-            "QPushButton:pressed { background: rgba(255,255,255,0.14); }"
-        )
         btn_more.clicked.connect(
             lambda: self._more_menu.exec(btn_more.mapToGlobal(btn_more.rect().bottomLeft()))
         )
@@ -238,17 +216,13 @@ class ManageItemsPage(QWidget):
     @staticmethod
     def _icon_btn(fa_name, tooltip, slot, color="#F5F1E6"):
         btn = QPushButton()
+        btn.setObjectName("btn-icon")
         btn.setIcon(qta.icon(fa_name, color=color))
         btn.setIconSize(QSize(16, 16))
         btn.setFixedWidth(30)
         btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         btn.setToolTip(tooltip)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setStyleSheet(
-            "QPushButton { background: transparent; border: none; padding: 0;"
-            " min-height: 0; min-width: 0; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.08); border-radius: 4px; }"
-        )
         btn.clicked.connect(slot)
         return btn
 
@@ -539,9 +513,13 @@ class ManageItemsPage(QWidget):
         if not self._selected_cat_id:
             QMessageBox.information(self, "Info", "Selectionnez une categorie d'abord.")
             return
-        dlg = ItemDialog(self, self._categories_data, default_cat_id=self._selected_cat_id)
+        all_ingredients = self.api.get_ingredients()
+        dlg = ItemDialog(self, self._categories_data, default_cat_id=self._selected_cat_id,
+                         all_ingredients=all_ingredients)
         if dlg.exec() == QDialog.Accepted:
-            if self.api.create_item(dlg.get_values()):
+            result = self.api.create_item(dlg.get_values())
+            if result:
+                self.api.set_item_ingredients(result["id"], dlg.get_ingredient_names())
                 self._refresh_all()
             else:
                 QMessageBox.warning(self, "Erreur", "Impossible de creer l'article.")
@@ -550,9 +528,11 @@ class ManageItemsPage(QWidget):
         item = self._find_item(item_id)
         if not item:
             return
-        dlg = ItemDialog(self, self._categories_data, item=item)
+        all_ingredients = self.api.get_ingredients()
+        dlg = ItemDialog(self, self._categories_data, item=item, all_ingredients=all_ingredients)
         if dlg.exec() == QDialog.Accepted:
             if self.api.update_item(item_id, dlg.get_values()):
+                self.api.set_item_ingredients(item_id, dlg.get_ingredient_names())
                 self._refresh_all()
             else:
                 QMessageBox.warning(self, "Erreur", "Impossible de modifier l'article.")
@@ -672,10 +652,10 @@ class CategoryDialog(QDialog):
 
 
 class ItemDialog(QDialog):
-    def __init__(self, parent, categories, item=None, default_cat_id=None):
+    def __init__(self, parent, categories, item=None, default_cat_id=None, all_ingredients=None):
         super().__init__(parent)
         self.setWindowTitle("Modifier l'article" if item else "Nouvel article")
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(440)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
@@ -719,6 +699,24 @@ class ItemDialog(QDialog):
 
         layout.addLayout(form)
 
+        sep = QFrame()
+        sep.setObjectName("separator")
+        sep.setFrameShape(QFrame.HLine)
+        layout.addWidget(sep)
+
+        ingr_lbl = QLabel("Ingrédients de l'article :")
+        ingr_lbl.setObjectName("page-subtitle")
+        layout.addWidget(ingr_lbl)
+
+        current_ingrs = [i["name"] for i in (item.get("ingredients", []) if item else [])]
+        all_ingr_names = [i["name"] for i in (all_ingredients or [])]
+        self._ingr_widget = IngredientTagWidget(
+            current_ingredients=current_ingrs,
+            all_ingredient_names=all_ingr_names,
+            parent=self,
+        )
+        layout.addWidget(self._ingr_widget)
+
         btns = QHBoxLayout()
         btns.setSpacing(8)
         btn_cancel = QPushButton("Annuler")
@@ -739,6 +737,9 @@ class ItemDialog(QDialog):
             return
         self.accept()
 
+    def get_ingredient_names(self):
+        return self._ingr_widget.get_ingredient_names()
+
     def get_values(self):
         stock = self.stock_spin.value()
         return {
@@ -748,6 +749,75 @@ class ItemDialog(QDialog):
             "stock_quantity": None if stock == -1 else stock,
             "category_id": self.cat_combo.currentData(),
         }
+
+
+class IngredientTagWidget(QWidget):
+    def __init__(self, current_ingredients=None, all_ingredient_names=None, parent=None):
+        super().__init__(parent)
+        self._names = list(current_ingredients or [])
+        self._all_names = list(all_ingredient_names or [])
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self._list = QListWidget()
+        self._list.setObjectName("ingredient-tags")
+        self._list.setMaximumHeight(90)
+        self._refresh_list()
+        layout.addWidget(self._list)
+
+        add_row = QHBoxLayout()
+        add_row.setSpacing(6)
+
+        self._input = QLineEdit()
+        self._input.setPlaceholderText("Ajouter un ingrédient…")
+        self._completer = QCompleter(self._all_names, self._input)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchContains)
+        self._input.setCompleter(self._completer)
+        self._input.returnPressed.connect(self._add_current)
+        add_row.addWidget(self._input, 1)
+
+        btn_add = QPushButton("Ajouter")
+        btn_add.setObjectName("btn-secondary")
+        btn_add.setFixedWidth(80)
+        btn_add.clicked.connect(self._add_current)
+        add_row.addWidget(btn_add)
+
+        btn_rm = QPushButton("Retirer")
+        btn_rm.setObjectName("btn-secondary")
+        btn_rm.setFixedWidth(70)
+        btn_rm.clicked.connect(self._remove_selected)
+        add_row.addWidget(btn_rm)
+
+        layout.addLayout(add_row)
+
+    def _refresh_list(self):
+        self._list.clear()
+        for name in self._names:
+            self._list.addItem(name)
+
+    def _add_current(self):
+        name = self._input.text().strip()
+        if name and name not in self._names:
+            self._names.append(name)
+            if name not in self._all_names:
+                self._all_names.append(name)
+                self._completer.setModel(QStringListModel(self._all_names))
+            self._refresh_list()
+        self._input.clear()
+
+    def _remove_selected(self):
+        for idx in sorted([i.row() for i in self._list.selectedIndexes()], reverse=True):
+            if 0 <= idx < len(self._names):
+                self._names.pop(idx)
+        self._refresh_list()
+
+    def get_ingredient_names(self):
+        return list(self._names)
 
 
 class OptionDialog(QDialog):
@@ -910,10 +980,10 @@ class BulkAddDialog(QDialog):
             w.deleteLater()
 
         btn_rm = QPushButton()
+        btn_rm.setObjectName("btn-icon")
         btn_rm.setIcon(qta.icon("fa5s.times", color="#C0392B"))
         btn_rm.setIconSize(QSize(11, 11))
         btn_rm.setFixedSize(26, 26)
-        btn_rm.setStyleSheet("background: transparent; border: none;")
         btn_rm.setCursor(Qt.PointingHandCursor)
         btn_rm.clicked.connect(remove)
         row_dict["_rm_btn"] = btn_rm
@@ -1266,8 +1336,8 @@ class BulkEditDialog(QDialog):
 
     def _id_label(self, entity_id):
         lbl = QLabel(f"#{entity_id}")
+        lbl.setObjectName("text-muted")
         lbl.setFixedWidth(36)
-        lbl.setStyleSheet("color: #6A6055; font-size: 11px;")
         lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         return lbl
 
@@ -1337,7 +1407,7 @@ class BulkEditDialog(QDialog):
         h.addWidget(stock, 1)
 
         ctx = QLabel(f"({item_name})")
-        ctx.setStyleSheet("color: #6A6055;")
+        ctx.setObjectName("text-dim")
         h.addWidget(ctx, 2)
 
         layout.addWidget(w)

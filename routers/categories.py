@@ -41,6 +41,10 @@ def _build_filtered_category(cat: models.Category, include_deleted: bool) -> sch
                 )
                 for o in opts
             ],
+            ingredients=[
+                schemas.IngredientRead(id=i.id, name=i.name)
+                for i in item.ingredients
+            ],
         ))
 
     active_items = [i for i in item_schemas if i.deleted_at is None]

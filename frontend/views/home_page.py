@@ -36,14 +36,14 @@ class HomePage(QWidget):
         layout.addSpacing(30)
 
         location = QLabel("Saint-Georges-de-Mons")
-        location.setStyleSheet("font-size: 13px; color: #6A6255;")
+        location.setObjectName("text-dim")
         location.setAlignment(Qt.AlignCenter)
         layout.addWidget(location)
 
         layout.addStretch(3)
 
         loading = QLabel("Chargement...")
-        loading.setStyleSheet("font-size: 12px; color: #5A5550;")
+        loading.setObjectName("text-faint")
         loading.setAlignment(Qt.AlignCenter)
         layout.addWidget(loading)
 

@@ -1,7 +1,67 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Optional
+from sqlalchemy import func as sqlfunc
 from sqlalchemy.orm import Session, joinedload
 import models, schemas
+# ==========================================
+# USERS
+# ==========================================
+
+def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
+    return db.query(models.User).filter(
+        models.User.username == username,
+        models.User.deleted_at == None,
+    ).first()
+
+
+def authenticate_user(db: Session, username: str) -> Optional[models.User]:
+    return get_user_by_username(db, username)
+
+
+def create_user(db: Session, data: schemas.UserCreate) -> Optional[models.User]:
+    if get_user_by_username(db, data.username):
+        return None
+    user = models.User(username=data.username, role=data.role)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user(db: Session, user_id: int, data: schemas.UserUpdate) -> Optional[models.User]:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return None
+    if data.username is not None:
+        existing = db.query(models.User).filter(
+            models.User.username == data.username,
+            models.User.id != user_id,
+            models.User.deleted_at == None,
+        ).first()
+        if existing:
+            return None
+        user.username = data.username
+    if data.role is not None:
+        user.role = data.role
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def list_users(db: Session) -> list[models.User]:
+    return db.query(models.User).filter(
+        models.User.deleted_at == None
+    ).order_by(models.User.username).all()
+
+
+def delete_user(db: Session, user_id: int) -> bool:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return False
+    db.delete(user)
+    db.commit()
+    return True
 
 
 # ==========================================
@@ -52,7 +112,11 @@ def decrease_inventory_after_order(db: Session, item_id: int, quantity_to_remove
 
 def decrease_option_stock(db: Session, item_option_id: int, quantity: int):
     option = db.query(models.ItemOption).filter(models.ItemOption.id == item_option_id).first()
-    if option and option.stock_quantity >= quantity:
+    if not option:
+        return None
+    if option.stock_quantity is None:
+        return option  # unlimited
+    if option.stock_quantity >= quantity:
         option.stock_quantity -= quantity
         db.flush()
         return option
@@ -159,10 +223,14 @@ def calculate_order_total(db: Session, order_items: list[schemas.OrderItemCreate
         db_item = db.query(models.Item).filter(models.Item.id == item_data.item_id).first()
         if db_item:
             total += db_item.price * item_data.quantity
+        if item_data.modifications:
+            for mod in item_data.modifications:
+                if mod.modification_type == "add":
+                    total += Decimal("1.00") * item_data.quantity
     return total
 
 
-def place_order(db: Session, order_data: schemas.OrderCreate):
+def place_order(db: Session, order_data: schemas.OrderCreate, user_id: Optional[int] = None):
     for item_data in order_data.items:
         db_item = db.query(models.Item).filter(models.Item.id == item_data.item_id).first()
         if not db_item:
@@ -174,7 +242,7 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
                 option = db.query(models.ItemOption).filter(
                     models.ItemOption.id == sel_opt.item_option_id
                 ).first()
-                if not option or option.stock_quantity < sel_opt.quantity:
+                if not option or (option.stock_quantity is not None and option.stock_quantity < sel_opt.quantity):
                     return None
 
     for item_data in order_data.items:
@@ -195,6 +263,7 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
         customer_phone=order_data.customer_phone,
         status=models.OrderStatus.PENDING,
         total_price=total,
+        created_by_user_id=user_id,
     )
 
     for item_data in order_data.items:
@@ -220,6 +289,21 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
                     )
                 )
 
+        if item_data.modifications:
+            for mod in item_data.modifications:
+                ingredient = db.query(models.Ingredient).filter(
+                    models.Ingredient.id == mod.ingredient_id
+                ).first()
+                price = Decimal("1.00") if mod.modification_type == "add" else Decimal("0.00")
+                new_order_item.modifications.append(
+                    models.OrderItemModification(
+                        ingredient_id=mod.ingredient_id,
+                        modification_type=mod.modification_type,
+                        unit_price=price,
+                        ingredient_name_snapshot=ingredient.name if ingredient else None,
+                    )
+                )
+
         new_order.items.append(new_order_item)
 
     db.add(new_order)
@@ -227,6 +311,80 @@ def place_order(db: Session, order_data: schemas.OrderCreate):
     db.refresh(new_order)
 
     return new_order
+
+
+def add_items_to_order(db: Session, order_id: int, items_data: list[schemas.OrderItemCreate]):
+    order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    if not order or order.status in [models.OrderStatus.PAID, models.OrderStatus.CANCELLED]:
+        return None
+
+    max_batch = db.query(sqlfunc.max(models.OrderItem.batch)).filter(
+        models.OrderItem.order_id == order_id
+    ).scalar() or 0
+    next_batch = max_batch + 1
+
+    for item_data in items_data:
+        db_item = db.query(models.Item).filter(models.Item.id == item_data.item_id).first()
+        if not db_item:
+            return None
+        if db_item.stock_quantity is not None and db_item.stock_quantity < item_data.quantity:
+            return None
+        if item_data.selected_options:
+            for sel_opt in item_data.selected_options:
+                option = db.query(models.ItemOption).filter(
+                    models.ItemOption.id == sel_opt.item_option_id
+                ).first()
+                if not option or (option.stock_quantity is not None and option.stock_quantity < sel_opt.quantity):
+                    return None
+
+    added_total = Decimal("0.00")
+    for item_data in items_data:
+        db_item = db.query(models.Item).filter(models.Item.id == item_data.item_id).first()
+        decrease_inventory_after_order(db, item_data.item_id, item_data.quantity)
+
+        new_item = models.OrderItem(
+            order_id=order_id,
+            item_id=item_data.item_id,
+            quantity=item_data.quantity,
+            comment=item_data.comment,
+            unit_price=db_item.price if db_item else Decimal("0.00"),
+            item_name_snapshot=db_item.name if db_item else "",
+            batch=next_batch,
+        )
+        if item_data.selected_options:
+            for sel_opt in item_data.selected_options:
+                option = db.query(models.ItemOption).filter(
+                    models.ItemOption.id == sel_opt.item_option_id
+                ).first()
+                decrease_option_stock(db, sel_opt.item_option_id, sel_opt.quantity)
+                new_item.selected_options.append(models.OrderItemOption(
+                    item_option_id=sel_opt.item_option_id,
+                    quantity=sel_opt.quantity,
+                    option_name_snapshot=option.name if option else "",
+                ))
+
+        if item_data.modifications:
+            for mod in item_data.modifications:
+                ingredient = db.query(models.Ingredient).filter(
+                    models.Ingredient.id == mod.ingredient_id
+                ).first()
+                price = Decimal("1.00") if mod.modification_type == "add" else Decimal("0.00")
+                new_item.modifications.append(models.OrderItemModification(
+                    ingredient_id=mod.ingredient_id,
+                    modification_type=mod.modification_type,
+                    unit_price=price,
+                    ingredient_name_snapshot=ingredient.name if ingredient else None,
+                ))
+                if mod.modification_type == "add":
+                    added_total += Decimal("1.00") * item_data.quantity
+
+        added_total += (db_item.price if db_item else Decimal("0.00")) * item_data.quantity
+        db.add(new_item)
+
+    order.total_price += added_total
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 def cancel_order(db: Session, order_id: int):

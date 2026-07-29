@@ -9,6 +9,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 
+class UserRole(StrEnum):
+    ADMIN = "admin"
+    SERVER = "server"
+
+
 class OrderType(StrEnum):
     EAT_IN = "eat_in"
     TAKE_AWAY = "take_away"
@@ -21,11 +26,18 @@ class SeatingLocation(StrEnum):
 
 class OrderStatus(StrEnum):
     PENDING = "pending"
-    IN_KITCHEN = "in_kitchen"
-    READY = "ready"
     PAID = "paid"
     CANCELLED = "cancelled"
 
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    role: Mapped[UserRole] = mapped_column(default=UserRole.SERVER)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(default=None)
 
 class Category(Base):
     __tablename__ = "categories"
@@ -62,6 +74,11 @@ class Item(Base):
     category: Mapped["Category"] = relationship(back_populates="items")
 
     options: Mapped[list["ItemOption"]] = relationship(back_populates="item", cascade="all, delete-orphan")
+    ingredient_links: Mapped[list["ItemIngredient"]] = relationship(cascade="all, delete-orphan")
+
+    @property
+    def ingredients(self) -> list["Ingredient"]:
+        return [link.ingredient for link in self.ingredient_links]
 
     @property
     def is_in_stock(self) -> bool:
@@ -107,6 +124,11 @@ class Order(Base):
     customer_name: Mapped[Optional[str]] = mapped_column(String, default=None)
     customer_phone: Mapped[Optional[str]] = mapped_column(String, default=None)
 
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+    created_by: Mapped[Optional["User"]] = relationship()
+
     items: Mapped[list["OrderItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
 
 
@@ -120,10 +142,14 @@ class OrderItem(Base):
     comment: Mapped[Optional[str]] = mapped_column(String, default=None)
     unit_price: Mapped[Decimal] = mapped_column(default=Decimal("0.00"))
     item_name_snapshot: Mapped[Optional[str]] = mapped_column(String, default=None)
+    batch: Mapped[int] = mapped_column(default=1)
 
     order: Mapped["Order"] = relationship(back_populates="items")
     item: Mapped["Item"] = relationship()
     selected_options: Mapped[list["OrderItemOption"]] = relationship(
+        back_populates="order_item", cascade="all, delete-orphan"
+    )
+    modifications: Mapped[list["OrderItemModification"]] = relationship(
         back_populates="order_item", cascade="all, delete-orphan"
     )
 
@@ -139,3 +165,32 @@ class OrderItemOption(Base):
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="selected_options")
     option: Mapped["ItemOption"] = relationship()
+
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String, unique=True, index=True)
+
+
+class ItemIngredient(Base):
+    __tablename__ = "item_ingredients"
+
+    item_id: Mapped[int] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
+    ingredient: Mapped["Ingredient"] = relationship()
+
+
+class OrderItemModification(Base):
+    __tablename__ = "order_item_modifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    order_item_id: Mapped[int] = mapped_column(ForeignKey("order_items.id", ondelete="CASCADE"))
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id", ondelete="RESTRICT"))
+    modification_type: Mapped[str] = mapped_column(String)  # "remove", "add", "base_change"
+    unit_price: Mapped[Decimal] = mapped_column(default=Decimal("0.00"))
+    ingredient_name_snapshot: Mapped[Optional[str]] = mapped_column(String, default=None)
+
+    order_item: Mapped["OrderItem"] = relationship(back_populates="modifications")
+    ingredient: Mapped["Ingredient"] = relationship()

@@ -35,7 +35,14 @@ class MenuPage(QWidget):
         btn_order.setMinimumHeight(100)
         btn_order.setCursor(Qt.PointingHandCursor)
         btn_order.clicked.connect(lambda: self.main_window.go_to("ORDER"))
-        grid.addWidget(btn_order, 0, 0, 1, 2)
+        grid.addWidget(btn_order, 0, 0)
+
+        btn_history = QPushButton("Historique des commandes")
+        btn_history.setObjectName("menu-card-primary")
+        btn_history.setMinimumHeight(100)
+        btn_history.setCursor(Qt.PointingHandCursor)
+        btn_history.clicked.connect(lambda: self.main_window.go_to("HISTORY"))
+        grid.addWidget(btn_history, 0, 1)
 
         btn_stock = QPushButton("Gestion des stocks")
         btn_stock.setObjectName("menu-card")
@@ -51,19 +58,12 @@ class MenuPage(QWidget):
         btn_items.clicked.connect(lambda: self.main_window.go_to("ITEMS"))
         grid.addWidget(btn_items, 1, 1)
 
-        btn_history = QPushButton("Historique")
-        btn_history.setObjectName("menu-card")
-        btn_history.setMinimumHeight(80)
-        btn_history.setCursor(Qt.PointingHandCursor)
-        btn_history.clicked.connect(lambda: self.main_window.go_to("HISTORY"))
-        grid.addWidget(btn_history, 2, 0)
-
         btn_access = QPushButton("Gestion des acces")
         btn_access.setObjectName("menu-card")
         btn_access.setMinimumHeight(80)
         btn_access.setCursor(Qt.PointingHandCursor)
         btn_access.clicked.connect(lambda: self.main_window.go_to("ACCESS"))
-        grid.addWidget(btn_access, 2, 1)
+        grid.addWidget(btn_access, 2, 0)
 
         outer.addLayout(grid, stretch=1)
         outer.addStretch()

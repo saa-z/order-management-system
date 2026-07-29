@@ -137,6 +137,34 @@ def init_db():
             {"name": "Part de dessert maison", "price": Decimal("4.00"), "available": True, "category": "Desserts"},
         ]
 
+        item_ingredient_map = {
+            "Margherita":       ["Tomate", "Mozzarella", "Basilic", "Origan"],
+            "Napolitaine":      ["Tomate", "Mozzarella", "Anchois", "Câpres", "Olives"],
+            "Norvégienne":      ["Crème fraîche", "Mozzarella", "Saumon", "Aneth"],
+            "4 Fromages":       ["Tomate", "Mozzarella", "Chèvre", "Bleu", "Parmesan"],
+            "Reine":            ["Tomate", "Mozzarella", "Jambon", "Champignons"],
+            "Végétarienne":     ["Tomate", "Mozzarella", "Poivrons", "Champignons", "Oignons", "Olives"],
+            "Auvergnate":       ["Crème fraîche", "Mozzarella", "Bleu", "Lardons", "Pommes de terre"],
+            "San Giorgio":      ["Tomate", "Mozzarella", "Jambon cru", "Roquette", "Parmesan"],
+            "Orientale":        ["Tomate", "Mozzarella", "Merguez", "Oignons", "Poivrons"],
+            "Kebab":            ["Tomate", "Mozzarella", "Kebab", "Oignons"],
+            "Panozzo Kebab":       ["Kebab", "Oignons", "Salade", "Tomate"],
+            "Panozzo Auvergnat":   ["Bleu", "Lardons", "Salade", "Tomate"],
+            "Panozzo Italien":     ["Jambon cru", "Mozzarella", "Roquette", "Tomate"],
+            "Panozzo Végétarien":  ["Poivrons", "Champignons", "Salade", "Tomate", "Mozzarella"],
+        }
+
+        ingredient_cache = {}
+
+        def get_or_create_ingredient(name: str) -> models.Ingredient:
+            if name in ingredient_cache:
+                return ingredient_cache[name]
+            ing = models.Ingredient(name=name)
+            db.add(ing)
+            db.flush()
+            ingredient_cache[name] = ing
+            return ing
+
         for item in menu_items:
             cat = db_categories.get(item["category"])
             if cat:
@@ -162,8 +190,17 @@ def init_db():
                         )
                         db.add(option)
 
+                for ingr_name in item_ingredient_map.get(item["name"], []):
+                    ing = get_or_create_ingredient(ingr_name)
+                    db.add(models.ItemIngredient(item_id=new_item.id, ingredient_id=ing.id))
+
+        admin = models.User(username="admin", role=models.UserRole.ADMIN)
+        db.add(admin)
+
         db.commit()
-        print("All categories and products have been successfully injected!")
+        print(f"{len(ingredient_cache)} ingredients created.")
+        print("Admin user created (username: admin).")
+        print("All categories, products and ingredients have been successfully injected!")
 
     except Exception as e:
         db.rollback()
