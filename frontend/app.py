@@ -7,10 +7,13 @@ from views.main_window import MainWindow
 def main():
     app = QApplication(sys.argv)
 
-    qss_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "styles.qss")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    qss_path = os.path.join(base_dir, "styles.qss")
+    assets_dir = os.path.join(base_dir, "assets").replace("\\", "/")
     try:
         with open(qss_path, "r", encoding="utf-8") as f:
-            app.setStyleSheet(f.read())
+            qss = f.read().replace("{ASSETS}", assets_dir)
+        app.setStyleSheet(qss)
     except FileNotFoundError:
         print(f"[styles] introuvable : {qss_path}")
     except Exception as e:

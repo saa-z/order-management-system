@@ -156,10 +156,15 @@ def init_db():
 
         ingredient_cache = {}
 
+        base_ingredient_names = {"tomate", "crème fraîche"}
+
         def get_or_create_ingredient(name: str) -> models.Ingredient:
             if name in ingredient_cache:
                 return ingredient_cache[name]
-            ing = models.Ingredient(name=name)
+            ing = models.Ingredient(
+                name=name,
+                is_base=name.lower() in base_ingredient_names,
+            )
             db.add(ing)
             db.flush()
             ingredient_cache[name] = ing
@@ -194,7 +199,7 @@ def init_db():
                     ing = get_or_create_ingredient(ingr_name)
                     db.add(models.ItemIngredient(item_id=new_item.id, ingredient_id=ing.id))
 
-        admin = models.User(username="admin", role=models.UserRole.ADMIN)
+        admin = models.User(username="admin", password="admin", role=models.UserRole.ADMIN)
         db.add(admin)
 
         db.commit()

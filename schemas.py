@@ -12,24 +12,31 @@ from models import OrderStatus, OrderType, SeatingLocation, UserRole
 
 class UserCreate(BaseModel):
     username: str
+    password: str
     role: UserRole = UserRole.SERVER
 
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
+    password: Optional[str] = None
     role: Optional[UserRole] = None
+    active: Optional[bool] = None  # False = révoqué (soft-delete), True = réactivé
 
 
 class UserRead(BaseModel):
     id: int
     username: str
+    password: Optional[str] = None  # visible : l'admin gère les mdp en clair
     role: UserRole
+    active: bool = True
     created_at: datetime
+    deleted_at: Optional[datetime] = None  # date de révocation
     model_config = ConfigDict(from_attributes=True)
 
 
 class LoginRequest(BaseModel):
     username: str
+    password: str
 
 
 class Token(BaseModel):
@@ -44,11 +51,18 @@ class Token(BaseModel):
 
 class IngredientCreate(BaseModel):
     name: str
+    is_base: bool = False
+
+
+class IngredientUpdate(BaseModel):
+    name: Optional[str] = None
+    is_base: Optional[bool] = None
 
 
 class IngredientRead(BaseModel):
     id: int
     name: str
+    is_base: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 

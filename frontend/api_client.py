@@ -230,35 +230,55 @@ class ApiClient:
     # ==========================================
     # USERS
     # ==========================================
+    # L'app desktop tape sur 127.0.0.1 → traitée comme admin par le backend
+    # (confiance loopback), donc pas besoin de token ici.
 
-    def get_users(self):
+    def get_users(self, include_revoked=False):
         try:
-            tok = self._get_admin_token()
-            if not tok:
-                return []
-            response = httpx.get(
-                f"{self.base_url}/users/",
-                headers={"Authorization": f"Bearer {tok}"},
-                timeout=self.timeout,
-            )
+            params = {"include_revoked": str(include_revoked).lower()}
+            response = httpx.get(f"{self.base_url}/users/", params=params, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except Exception as e:
             print(f"Error fetching users: {e}")
             return []
 
-    def _get_admin_token(self):
+    def create_user(self, username, password, role="server"):
         try:
-            res = httpx.post(
-                f"{self.base_url}/auth/login",
-                json={"username": "admin"},
+            response = httpx.post(
+                f"{self.base_url}/users/",
+                json={"username": username, "password": password, "role": role},
                 timeout=self.timeout,
             )
-            if res.status_code == 200:
-                return res.json().get("access_token")
-        except Exception:
-            pass
-        return None
+            if response.status_code >= 400:
+                return {"error": response.json().get("detail", "Erreur")}
+            return response.json()
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            return None
+
+    def update_user(self, user_id, payload):
+        try:
+            response = httpx.put(
+                f"{self.base_url}/users/{user_id}",
+                json=payload,
+                timeout=self.timeout,
+            )
+            if response.status_code >= 400:
+                return {"error": response.json().get("detail", "Erreur")}
+            return response.json()
+        except Exception as e:
+            print(f"Error updating user: {e}")
+            return None
+
+    def delete_user(self, user_id):
+        try:
+            response = httpx.delete(f"{self.base_url}/users/{user_id}", timeout=self.timeout)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Error deleting user: {e}")
+            return False
 
     def update_order_status(self, order_id, status):
         try:
@@ -298,3 +318,41 @@ class ApiClient:
         except Exception as e:
             print(f"Error setting item ingredients: {e}")
             return None
+
+    def create_ingredient(self, name, is_base=False):
+        try:
+            response = httpx.post(
+                f"{self.base_url}/ingredients/",
+                json={"name": name, "is_base": is_base},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error creating ingredient: {e}")
+            return None
+
+    def update_ingredient(self, ingredient_id, payload):
+        try:
+            response = httpx.patch(
+                f"{self.base_url}/ingredients/{ingredient_id}",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error updating ingredient: {e}")
+            return None
+
+    def delete_ingredient(self, ingredient_id):
+        try:
+            response = httpx.delete(
+                f"{self.base_url}/ingredients/{ingredient_id}",
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Error deleting ingredient: {e}")
+            return False

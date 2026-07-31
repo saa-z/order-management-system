@@ -21,8 +21,8 @@ class _PassThroughWheelTable(QTableWidget):
 
 STATUS_LABELS = {
     "pending": "En attente",
-    "paid": "Payee",
-    "cancelled": "Annulee",
+    "paid": "Payée",
+    "cancelled": "Annulée",
 }
 
 STATUS_COLORS = {
@@ -62,7 +62,7 @@ class HistoryPage(QWidget):
         top_bar.addWidget(title)
         top_bar.addStretch()
 
-        btn_refresh = QPushButton("Rafraichir")
+        btn_refresh = QPushButton("Rafraîchir")
         btn_refresh.setObjectName("btn-nav")
         btn_refresh.setFixedWidth(110)
         btn_refresh.setCursor(Qt.PointingHandCursor)

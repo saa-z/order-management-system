@@ -2,7 +2,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QLabel, QMessageBox,
                                QHeaderView, QComboBox, QDialog, QFrame,
                                QTimeEdit, QLineEdit, QSpinBox, QCheckBox,
-                               QRadioButton, QButtonGroup, QScrollArea)
+                               QButtonGroup,
+                               QListWidget, QListWidgetItem)
 from PySide6.QtCore import Qt, QTime
 from PySide6.QtGui import QTextDocument
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
@@ -13,32 +14,32 @@ from views.order_type_dialog import OrderTypeDialog
 from views.option_picker_dialog import OptionPickerDialog
 
 
-_BASE_NAMES = {"tomate", "crème fraîche"}
-
-
 def _format_modifications_display(mods):
     if not mods:
         return ""
+    base = [m.get("ingredient_name", "?") for m in mods if m.get("modification_type") == "base_change"]
+    adds = [m.get("ingredient_name", "?") for m in mods if m.get("modification_type") == "add"]
+    removes = [m.get("ingredient_name", "?") for m in mods if m.get("modification_type") == "remove"]
     parts = []
-    for m in mods:
-        t = m.get("modification_type", "")
-        n = m.get("ingredient_name", "?")
-        if t == "base_change":
-            parts.append(f"base {n}")
-        elif t == "remove":
-            parts.append(f"−{n}")
-        elif t == "add":
-            parts.append(f"+{n}")
+    if base:
+        parts.append(f"BASE {base[0]}")
+    if adds:
+        parts.append(f"SUPP [{', '.join(adds)}]")
+    if removes:
+        parts.append(f"SANS [{', '.join(removes)}]")
     return ", ".join(parts)
 
 
 class CartEditDialog(QDialog):
     """Edit comment and ingredient modifications for an existing cart row."""
 
-    def __init__(self, item_data, all_ingredients, parent=None):
+    def __init__(self, item_data, all_ingredients, parent=None, category_name=""):
         super().__init__(parent)
         self.setWindowTitle(f"Modifier — {item_data.get('name', '')}")
         self.setMinimumWidth(420)
+
+        # Seules les pizzas ont une base (tomate / crème fraîche) modifiable.
+        allow_base = "pizza" in (category_name or "").lower()
 
         item_ingr = item_data.get("ingredients") or []
         initial_mods = item_data.get("modifications") or []
@@ -48,7 +49,6 @@ class CartEditDialog(QDialog):
         self._current_base_id = None
         self._base_group = None
         self._removal_checks = {}
-        self._supp_checks = {}
 
         root = QVBoxLayout(self)
         root.setSpacing(12)
@@ -80,40 +80,41 @@ class CartEditDialog(QDialog):
                 elif t == "add":
                     initial_added.add(iid)
 
-            scroll_w = QWidget()
-            sv = QVBoxLayout(scroll_w)
-            sv.setSpacing(12)
-            sv.setContentsMargins(0, 0, 0, 0)
+            # Base = ingrédient marqué is_base en BDD, et seulement pour les pizzas ;
+            # sinon (panozzo, etc.) ils sont traités comme des ingrédients normaux.
+            def _is_base(ing):
+                return allow_base and bool(ing.get("is_base"))
 
             # Base toggle
-            base_in_item = [i for i in item_ingr if i["name"].lower() in _BASE_NAMES]
+            base_in_item = [i for i in item_ingr if _is_base(i)]
             if base_in_item:
                 self._current_base_id = base_in_item[0]["id"]
                 lbl = QLabel("Base :")
                 lbl.setObjectName("dialog-section")
-                sv.addWidget(lbl)
+                root.addWidget(lbl)
                 base_row = QHBoxLayout()
                 self._base_group = QButtonGroup(self)
-                all_bases = [i for i in all_ingredients if i["name"].lower() in _BASE_NAMES]
+                self._base_group.setExclusive(True)
+                all_bases = [i for i in all_ingredients if bool(i.get("is_base"))]
                 for ing in all_bases:
-                    rb = QRadioButton(ing["name"])
-                    rb.setProperty("ing_id", ing["id"])
-                    rb.setProperty("ing_name", ing["name"])
+                    cb = QCheckBox(ing["name"])
+                    cb.setProperty("ing_id", ing["id"])
+                    cb.setProperty("ing_name", ing["name"])
                     if initial_base_id is not None:
-                        rb.setChecked(ing["id"] == initial_base_id)
+                        cb.setChecked(ing["id"] == initial_base_id)
                     else:
-                        rb.setChecked(ing["id"] == self._current_base_id)
-                    self._base_group.addButton(rb)
-                    base_row.addWidget(rb)
+                        cb.setChecked(ing["id"] == self._current_base_id)
+                    self._base_group.addButton(cb)
+                    base_row.addWidget(cb)
                 base_row.addStretch()
-                sv.addLayout(base_row)
+                root.addLayout(base_row)
 
-            # Retraits
-            non_base = [i for i in item_ingr if i["name"].lower() not in _BASE_NAMES]
+            # Retraits — ingrédients de l'article, pré-cochés
+            non_base = [i for i in item_ingr if not _is_base(i)]
             if non_base:
                 lbl2 = QLabel("Retraits (décochez pour retirer) :")
                 lbl2.setObjectName("dialog-section")
-                sv.addWidget(lbl2)
+                root.addWidget(lbl2)
                 grid = QHBoxLayout()
                 c1 = QVBoxLayout(); c1.setSpacing(4)
                 c2 = QVBoxLayout(); c2.setSpacing(4)
@@ -123,36 +124,35 @@ class CartEditDialog(QDialog):
                     self._removal_checks[ingr["id"]] = {"cb": cb, "name": ingr["name"]}
                     (c1 if idx % 2 == 0 else c2).addWidget(cb)
                 grid.addLayout(c1); grid.addLayout(c2); grid.addStretch()
-                sv.addLayout(grid)
+                root.addLayout(grid)
 
-            # Suppléments
+            # Suppléments — recherche + liste de tous les ingrédients de la BDD
             item_ingr_ids = {i["id"] for i in item_ingr}
             supp_ingr = [
                 i for i in all_ingredients
-                if i["id"] not in item_ingr_ids and i["name"].lower() not in _BASE_NAMES
+                if i["id"] not in item_ingr_ids and not _is_base(i)
             ]
             if supp_ingr:
-                lbl3 = QLabel("Supplément +1€ (cochez pour ajouter) :")
+                lbl3 = QLabel("Suppléments +1€ (recherchez et cochez) :")
                 lbl3.setObjectName("dialog-section")
-                sv.addWidget(lbl3)
-                sgrid = QHBoxLayout()
-                sc1 = QVBoxLayout(); sc1.setSpacing(4)
-                sc2 = QVBoxLayout(); sc2.setSpacing(4)
-                for idx, ingr in enumerate(supp_ingr):
-                    cb = QCheckBox(f"{ingr['name']} (+1€)")
-                    cb.setChecked(ingr["id"] in initial_added)
-                    self._supp_checks[ingr["id"]] = {"cb": cb, "name": ingr["name"]}
-                    (sc1 if idx % 2 == 0 else sc2).addWidget(cb)
-                sgrid.addLayout(sc1); sgrid.addLayout(sc2); sgrid.addStretch()
-                sv.addLayout(sgrid)
+                root.addWidget(lbl3)
 
-            sv.addStretch()
-            scroll = QScrollArea()
-            scroll.setWidget(scroll_w)
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QFrame.NoFrame)
-            scroll.setMaximumHeight(360)
-            root.addWidget(scroll)
+                self._supp_search = QLineEdit()
+                self._supp_search.setPlaceholderText("Rechercher un ingrédient…")
+                self._supp_search.textChanged.connect(self._filter_supplements)
+                root.addWidget(self._supp_search)
+
+                self._supp_list = QListWidget()
+                self._supp_list.setObjectName("supp-list")
+                self._supp_list.setMinimumHeight(160)
+                for ingr in sorted(supp_ingr, key=lambda x: x["name"].lower()):
+                    it = QListWidgetItem(ingr["name"])
+                    it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+                    it.setCheckState(Qt.Checked if ingr["id"] in initial_added else Qt.Unchecked)
+                    it.setData(Qt.UserRole, ingr["id"])
+                    it.setData(Qt.UserRole + 1, ingr["name"])
+                    self._supp_list.addItem(it)
+                root.addWidget(self._supp_list, 1)
 
         # Buttons
         btns = QHBoxLayout()
@@ -165,6 +165,12 @@ class CartEditDialog(QDialog):
         btn_ok.clicked.connect(self.accept)
         btns.addWidget(btn_ok)
         root.addLayout(btns)
+
+    def _filter_supplements(self, text):
+        q = text.strip().lower()
+        for i in range(self._supp_list.count()):
+            it = self._supp_list.item(i)
+            it.setHidden(q not in it.text().lower())
 
     def get_comment(self):
         t = self._comment.text().strip()
@@ -185,9 +191,15 @@ class CartEditDialog(QDialog):
         for iid, info in self._removal_checks.items():
             if not info["cb"].isChecked():
                 mods.append({"ingredient_id": iid, "modification_type": "remove", "ingredient_name": info["name"]})
-        for iid, info in self._supp_checks.items():
-            if info["cb"].isChecked():
-                mods.append({"ingredient_id": iid, "modification_type": "add", "ingredient_name": info["name"]})
+        if hasattr(self, "_supp_list"):
+            for i in range(self._supp_list.count()):
+                it = self._supp_list.item(i)
+                if it.checkState() == Qt.Checked:
+                    mods.append({
+                        "ingredient_id": it.data(Qt.UserRole),
+                        "modification_type": "add",
+                        "ingredient_name": it.data(Qt.UserRole + 1),
+                    })
         return mods if mods else None
 
 
@@ -357,9 +369,9 @@ class PosOrderPage(QWidget):
         self.cart_list.setObjectName("cart-table")
         self.cart_list.setHorizontalHeaderLabels(["Article", "Qté", "Prix", ""])
         self.cart_list.verticalHeader().hide()
-        self.cart_list.verticalHeader().setDefaultSectionSize(38)
         self.cart_list.setShowGrid(False)
         self.cart_list.setAlternatingRowColors(True)
+        self.cart_list.setWordWrap(True)
         self.cart_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.cart_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.cart_list.setColumnWidth(1, 82)
@@ -408,8 +420,8 @@ class PosOrderPage(QWidget):
         actions_layout.addLayout(row2)
         right_panel.addLayout(actions_layout)
 
-        content_layout.addLayout(left_panel, stretch=3)
-        content_layout.addLayout(right_panel, stretch=2)
+        content_layout.addLayout(left_panel, stretch=2)
+        content_layout.addLayout(right_panel, stretch=3)
         main_layout.addLayout(content_layout)
 
     def refresh_data(self):
@@ -419,7 +431,7 @@ class PosOrderPage(QWidget):
             self._all_ingredients = self.api.get_ingredients()
             self.load_categories()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur API", f"Impossible de charger les donnees : {e}")
+            QMessageBox.critical(self, "Erreur API", f"Impossible de charger les données : {e}")
 
     def _format_selected_options_display(self, selected_options):
         if not selected_options:
@@ -451,7 +463,7 @@ class PosOrderPage(QWidget):
 
             selected = dialog.get_selected_options()
             if not selected:
-                QMessageBox.warning(self, "Aucune selection", "Veuillez selectionner au moins une option.")
+                QMessageBox.warning(self, "Aucune sélection", "Veuillez sélectionner au moins une option.")
                 return
 
             item_data["selected_options"] = selected
@@ -505,7 +517,24 @@ class PosOrderPage(QWidget):
 
         self.cart_list.setCellWidget(cart_row, 3, self._make_cart_action_widget())
 
+        self._apply_cart_row_height(cart_row)
         self.update_total()
+
+    def _apply_cart_row_height(self, row):
+        """Ligne assez haute pour le spinbox ET le texte article enveloppé."""
+        spin = self.cart_list.cellWidget(row, 1)
+        min_h = spin.sizeHint().height() if spin else 30
+        name_item = self.cart_list.item(row, 0)
+        text_h = min_h
+        if name_item:
+            col_w = self.cart_list.columnWidth(0)
+            fm = self.cart_list.fontMetrics()
+            rect = fm.boundingRect(
+                0, 0, max(col_w - 24, 40), 10000,
+                int(Qt.TextWordWrap), name_item.text(),
+            )
+            text_h = rect.height() + 12
+        self.cart_list.setRowHeight(row, max(min_h, text_h))
 
     def update_total(self):
         new_total = 0.0
@@ -586,6 +615,13 @@ class PosOrderPage(QWidget):
 
         return w
 
+    def _category_name_of(self, item_data):
+        item_id = item_data.get("id")
+        for cat_name, items in self.categories_data.items():
+            if any(it.get("id") == item_id for it in items):
+                return cat_name
+        return ""
+
     def _edit_cart_row(self, row):
         if row < 0:
             return
@@ -594,7 +630,8 @@ class PosOrderPage(QWidget):
             return
         item_data = name_item.data(Qt.UserRole)
 
-        dlg = CartEditDialog(item_data, self._all_ingredients, self)
+        category_name = self._category_name_of(item_data)
+        dlg = CartEditDialog(item_data, self._all_ingredients, self, category_name=category_name)
         if dlg.exec() != QDialog.Accepted:
             return
 
@@ -606,7 +643,7 @@ class PosOrderPage(QWidget):
             details = self._format_selected_options_display(item_data["selected_options"])
             display_name = f"{item_data['name']} ({details})"
         if item_data.get("modifications"):
-            display_name += f" [{_format_modifications_display(item_data['modifications'])}]"
+            display_name += f" ({_format_modifications_display(item_data['modifications'])})"
         if item_data.get("comment"):
             display_name += f" [{item_data['comment']}]"
 
@@ -619,6 +656,7 @@ class PosOrderPage(QWidget):
         if price_item:
             price_item.setText(f"{unit_price:.2f}")
 
+        self._apply_cart_row_height(row)
         self.update_total()
 
     def _remove_cart_row(self, row):
@@ -710,7 +748,7 @@ class PosOrderPage(QWidget):
 
         result = self.api.create_order(order_payload)
         if not result:
-            QMessageBox.critical(self, "Erreur", "Impossible de creer la commande.")
+            QMessageBox.critical(self, "Erreur", "Impossible de créer la commande.")
             return
 
         self._current_order = result
@@ -937,4 +975,4 @@ class PosOrderPage(QWidget):
         </body></html>"""
 
         if self._print_html(html):
-            QMessageBox.information(self, "Cuisine", "Commande envoyee en cuisine avec succes !")
+            QMessageBox.information(self, "Cuisine", "Commande envoyée en cuisine avec succès !")

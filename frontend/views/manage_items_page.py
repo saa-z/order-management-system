@@ -3,7 +3,8 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QDialog,
     QFormLayout, QLineEdit, QDoubleSpinBox, QSpinBox, QCheckBox,
     QAbstractItemView, QMessageBox, QComboBox, QSizePolicy,
-    QScrollArea, QTabWidget, QFrame, QMenu, QListWidget, QCompleter,
+    QScrollArea, QTabWidget, QFrame, QMenu, QListWidget, QListWidgetItem,
+    QCompleter,
 )
 import qtawesome as qta
 
@@ -92,7 +93,7 @@ class ManageItemsPage(QWidget):
         top.addWidget(title)
         top.addStretch()
 
-        self.toggle_deleted = ToggleSwitch("Afficher supprimes")
+        self.toggle_deleted = ToggleSwitch("Inclure la corbeille")
         self.toggle_deleted.toggled.connect(self._on_toggle_deleted)
         top.addWidget(self.toggle_deleted)
 
@@ -113,6 +114,12 @@ class ManageItemsPage(QWidget):
             lambda: self._more_menu.exec(btn_more.mapToGlobal(btn_more.rect().bottomLeft()))
         )
         top.addWidget(btn_more)
+
+        btn_ingredients = QPushButton("Ingrédients")
+        btn_ingredients.setObjectName("btn-nav")
+        btn_ingredients.setCursor(Qt.PointingHandCursor)
+        btn_ingredients.clicked.connect(self._open_ingredients)
+        top.addWidget(btn_ingredients)
 
         btn_back = QPushButton("Menu")
         btn_back.setObjectName("btn-nav")
@@ -170,7 +177,7 @@ class ManageItemsPage(QWidget):
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(8)
-        v.addLayout(self._make_panel_header("Categories", self._add_category))
+        v.addLayout(self._make_panel_header("Catégories", self._add_category))
 
         self.cat_table = self._make_table(["Nom", ""], stretch_col=0)
         self.cat_table.cellClicked.connect(self._on_cat_cell_clicked)
@@ -450,6 +457,12 @@ class ManageItemsPage(QWidget):
         if dlg.exec() == QDialog.Accepted:
             self._refresh_all()
 
+    def _open_ingredients(self):
+        dlg = IngredientsDialog(self, self.api)
+        dlg.exec()
+        # les ingrédients peuvent avoir changé : rafraîchir pour l'édition d'articles
+        self._refresh_all()
+
     # ==========================================
     # CATEGORY CRUD
     # ==========================================
@@ -461,7 +474,7 @@ class ManageItemsPage(QWidget):
             if result:
                 self._refresh_all()
             else:
-                QMessageBox.warning(self, "Erreur", "Impossible de creer la categorie.")
+                QMessageBox.warning(self, "Erreur", "Impossible de créer la catégorie.")
 
     def _edit_category(self, cat_id):
         cat = next((c for c in self._categories_data if c["id"] == cat_id), None)
@@ -473,14 +486,14 @@ class ManageItemsPage(QWidget):
             if result:
                 self._refresh_all()
             else:
-                QMessageBox.warning(self, "Erreur", "Impossible de modifier la categorie.")
+                QMessageBox.warning(self, "Erreur", "Impossible de modifier la catégorie.")
 
     def _delete_category(self, cat_id):
         cat = next((c for c in self._categories_data if c["id"] == cat_id), None)
         name = cat["name"] if cat else str(cat_id)
         reply = QMessageBox.question(
             self, "Confirmer",
-            f"Supprimer la categorie '{name}' et tous ses articles ?",
+            f"Supprimer la catégorie '{name}' et tous ses articles ?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
@@ -490,11 +503,11 @@ class ManageItemsPage(QWidget):
                     self._selected_item_id = None
                 self._refresh_all()
             else:
-                QMessageBox.warning(self, "Erreur", "Impossible de supprimer la categorie.")
+                QMessageBox.warning(self, "Erreur", "Impossible de supprimer la catégorie.")
 
     def _restore_category(self, cat_id):
         if not self.api.restore_category(cat_id):
-            QMessageBox.warning(self, "Erreur", "Impossible de restaurer la categorie.")
+            QMessageBox.warning(self, "Erreur", "Impossible de restaurer la catégorie.")
         else:
             self._refresh_all()
 
@@ -511,7 +524,7 @@ class ManageItemsPage(QWidget):
 
     def _add_item(self):
         if not self._selected_cat_id:
-            QMessageBox.information(self, "Info", "Selectionnez une categorie d'abord.")
+            QMessageBox.information(self, "Info", "Sélectionnez une catégorie d'abord.")
             return
         all_ingredients = self.api.get_ingredients()
         dlg = ItemDialog(self, self._categories_data, default_cat_id=self._selected_cat_id,
@@ -522,7 +535,7 @@ class ManageItemsPage(QWidget):
                 self.api.set_item_ingredients(result["id"], dlg.get_ingredient_names())
                 self._refresh_all()
             else:
-                QMessageBox.warning(self, "Erreur", "Impossible de creer l'article.")
+                QMessageBox.warning(self, "Erreur", "Impossible de créer l'article.")
 
     def _edit_item(self, item_id):
         item = self._find_item(item_id)
@@ -571,14 +584,14 @@ class ManageItemsPage(QWidget):
 
     def _add_option(self):
         if not self._selected_item_id:
-            QMessageBox.information(self, "Info", "Selectionnez un article d'abord.")
+            QMessageBox.information(self, "Info", "Sélectionnez un article d'abord.")
             return
         dlg = OptionDialog(self)
         if dlg.exec() == QDialog.Accepted:
             if self.api.create_item_option(self._selected_item_id, dlg.get_values()):
                 self._refresh_all()
             else:
-                QMessageBox.warning(self, "Erreur", "Impossible de creer l'option.")
+                QMessageBox.warning(self, "Erreur", "Impossible de créer l'option.")
 
     def _edit_option(self, opt_id):
         opt = self._find_option(opt_id)
@@ -617,7 +630,7 @@ class ManageItemsPage(QWidget):
 class CategoryDialog(QDialog):
     def __init__(self, parent, name=""):
         super().__init__(parent)
-        self.setWindowTitle("Modifier la categorie" if name else "Nouvelle categorie")
+        self.setWindowTitle("Modifier la catégorie" if name else "Nouvelle catégorie")
         self.setMinimumWidth(320)
 
         layout = QVBoxLayout(self)
@@ -695,7 +708,7 @@ class ItemDialog(QDialog):
             idx = self.cat_combo.findData(target)
             if idx >= 0:
                 self.cat_combo.setCurrentIndex(idx)
-        form.addRow("Categorie :", self.cat_combo)
+        form.addRow("Catégorie :", self.cat_combo)
 
         layout.addLayout(form)
 
@@ -733,7 +746,7 @@ class ItemDialog(QDialog):
             QMessageBox.warning(self, "Validation", "Le nom est obligatoire.")
             return
         if self.cat_combo.currentData() is None:
-            QMessageBox.warning(self, "Validation", "Selectionnez une categorie.")
+            QMessageBox.warning(self, "Validation", "Sélectionnez une catégorie.")
             return
         self.accept()
 
@@ -764,8 +777,9 @@ class IngredientTagWidget(QWidget):
         layout.setSpacing(6)
 
         self._list = QListWidget()
-        self._list.setObjectName("ingredient-tags")
-        self._list.setMaximumHeight(90)
+        self._list.setObjectName("ingredient-edit-list")
+        self._list.setMaximumHeight(120)
+        self._list.setSelectionMode(QAbstractItemView.NoSelection)
         self._refresh_list()
         layout.addWidget(self._list)
 
@@ -782,23 +796,40 @@ class IngredientTagWidget(QWidget):
         add_row.addWidget(self._input, 1)
 
         btn_add = QPushButton("Ajouter")
-        btn_add.setObjectName("btn-secondary")
-        btn_add.setFixedWidth(80)
+        btn_add.setObjectName("btn-success")
+        btn_add.setCursor(Qt.PointingHandCursor)
         btn_add.clicked.connect(self._add_current)
         add_row.addWidget(btn_add)
-
-        btn_rm = QPushButton("Retirer")
-        btn_rm.setObjectName("btn-secondary")
-        btn_rm.setFixedWidth(70)
-        btn_rm.clicked.connect(self._remove_selected)
-        add_row.addWidget(btn_rm)
 
         layout.addLayout(add_row)
 
     def _refresh_list(self):
         self._list.clear()
+        v_margin = 7
         for name in self._names:
-            self._list.addItem(name)
+            item = QListWidgetItem()
+            row = QWidget()
+            row.setStyleSheet("background: transparent;")
+            h = QHBoxLayout(row)
+            h.setContentsMargins(10, v_margin, 6, v_margin)
+            h.setSpacing(6)
+            lbl = QLabel(name)
+            h.addWidget(lbl)
+            h.addStretch()
+            btn = QPushButton()
+            btn.setObjectName("btn-icon")
+            btn.setIcon(qta.icon("fa5s.trash-alt", color="#C0392B"))
+            btn.setIconSize(QSize(13, 13))
+            btn.setFixedSize(28, 24)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip("Retirer")
+            btn.clicked.connect(lambda _=False, n=name: self._remove_name(n))
+            h.addWidget(btn)
+            # hauteur adaptée au contenu (police du label) + marges + bordure item
+            content_h = max(lbl.sizeHint().height(), btn.sizeHint().height())
+            item.setSizeHint(QSize(0, content_h + 2 * v_margin + 2))
+            self._list.addItem(item)
+            self._list.setItemWidget(item, row)
 
     def _add_current(self):
         name = self._input.text().strip()
@@ -810,14 +841,170 @@ class IngredientTagWidget(QWidget):
             self._refresh_list()
         self._input.clear()
 
-    def _remove_selected(self):
-        for idx in sorted([i.row() for i in self._list.selectedIndexes()], reverse=True):
-            if 0 <= idx < len(self._names):
-                self._names.pop(idx)
-        self._refresh_list()
+    def _remove_name(self, name):
+        if name in self._names:
+            self._names.remove(name)
+            self._refresh_list()
 
     def get_ingredient_names(self):
         return list(self._names)
+
+
+class IngredientsDialog(QDialog):
+    """CRUD de la liste globale des ingrédients (table ingredients)."""
+
+    def __init__(self, parent, api_client):
+        super().__init__(parent)
+        self.api = api_client
+        self.setWindowTitle("Gestion des ingrédients")
+        self.setMinimumSize(420, 480)
+
+        root = QVBoxLayout(self)
+        root.setSpacing(12)
+        root.setContentsMargins(20, 16, 20, 16)
+
+        title = QLabel("Ingrédients disponibles")
+        title.setObjectName("section-header")
+        root.addWidget(title)
+
+        subtitle = QLabel(
+            "Ces ingrédients servent aux retraits et suppléments lors de la prise "
+            "de commande, et à composer les articles."
+        )
+        subtitle.setObjectName("text-muted")
+        subtitle.setWordWrap(True)
+        root.addWidget(subtitle)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Rechercher…")
+        self._search.textChanged.connect(self._filter)
+        root.addWidget(self._search)
+
+        hint = QLabel("Cochez « Base » pour tomate / crème fraîche (choix de base des pizzas).")
+        hint.setObjectName("text-muted")
+        hint.setWordWrap(True)
+        root.addWidget(hint)
+
+        self._list = QListWidget()
+        self._list.setObjectName("ingredient-edit-list")
+        self._list.setSelectionMode(QAbstractItemView.NoSelection)
+        root.addWidget(self._list, 1)
+
+        # Barre d'ajout
+        add_row = QHBoxLayout()
+        add_row.setSpacing(8)
+        self._new_name = QLineEdit()
+        self._new_name.setPlaceholderText("Nouvel ingrédient…")
+        self._new_name.returnPressed.connect(self._add)
+        add_row.addWidget(self._new_name, 1)
+        self._new_is_base = QCheckBox("Base")
+        add_row.addWidget(self._new_is_base)
+        btn_add = QPushButton("+ Ajouter")
+        btn_add.setObjectName("btn-success")
+        btn_add.setCursor(Qt.PointingHandCursor)
+        btn_add.clicked.connect(self._add)
+        add_row.addWidget(btn_add)
+        root.addLayout(add_row)
+
+        # Bouton bas
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_close = QPushButton("Fermer")
+        btn_close.setObjectName("btn-secondary")
+        btn_close.clicked.connect(self.accept)
+        btns.addWidget(btn_close)
+        root.addLayout(btns)
+
+        self._reload()
+
+    def _reload(self):
+        self._ingredients = self.api.get_ingredients()
+        self._populate()
+
+    def _populate(self):
+        q = self._search.text().strip().lower()
+        self._list.clear()
+        v_margin = 7
+        for ing in self._ingredients:
+            if q and q not in ing["name"].lower():
+                continue
+            item = QListWidgetItem()
+            row = QWidget()
+            row.setStyleSheet("background: transparent;")
+            h = QHBoxLayout(row)
+            h.setContentsMargins(10, v_margin, 6, v_margin)
+            h.setSpacing(8)
+
+            lbl = QLabel(ing["name"])
+            h.addWidget(lbl)
+            h.addStretch()
+
+            cb_base = QCheckBox("Base")
+            cb_base.setChecked(bool(ing.get("is_base")))
+            cb_base.toggled.connect(
+                lambda checked, iid=ing["id"]: self._toggle_base(iid, checked)
+            )
+            h.addWidget(cb_base)
+
+            btn = QPushButton()
+            btn.setObjectName("btn-icon")
+            btn.setIcon(qta.icon("fa5s.trash-alt", color="#C0392B"))
+            btn.setIconSize(QSize(13, 13))
+            btn.setFixedSize(28, 24)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip("Supprimer")
+            btn.clicked.connect(
+                lambda _=False, ing=ing: self._delete(ing)
+            )
+            h.addWidget(btn)
+
+            content_h = max(lbl.sizeHint().height(), btn.sizeHint().height())
+            item.setSizeHint(QSize(0, content_h + 2 * v_margin + 2))
+            self._list.addItem(item)
+            self._list.setItemWidget(item, row)
+
+    def _filter(self):
+        self._populate()
+
+    def _add(self):
+        name = self._new_name.text().strip()
+        if not name:
+            return
+        if any(i["name"].lower() == name.lower() for i in self._ingredients):
+            QMessageBox.information(self, "Info", f"« {name} » existe déjà.")
+            return
+        if self.api.create_ingredient(name, is_base=self._new_is_base.isChecked()):
+            self._new_name.clear()
+            self._new_is_base.setChecked(False)
+            self._reload()
+        else:
+            QMessageBox.warning(self, "Erreur", "Impossible de créer l'ingrédient.")
+
+    def _toggle_base(self, ingredient_id, is_base):
+        result = self.api.update_ingredient(ingredient_id, {"is_base": is_base})
+        if result:
+            for ing in self._ingredients:
+                if ing["id"] == ingredient_id:
+                    ing["is_base"] = is_base
+                    break
+        else:
+            QMessageBox.warning(self, "Erreur", "Impossible de modifier l'ingrédient.")
+            self._reload()
+
+    def _delete(self, ing):
+        if QMessageBox.question(
+            self, "Confirmer", f"Supprimer « {ing['name']} » ?",
+            QMessageBox.Yes | QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        if self.api.delete_ingredient(ing["id"]):
+            self._reload()
+        else:
+            QMessageBox.warning(
+                self, "Suppression impossible",
+                f"« {ing['name']} » est utilisé dans une commande passée et "
+                "ne peut pas être supprimé.",
+            )
 
 
 class OptionDialog(QDialog):
@@ -896,7 +1083,7 @@ class BulkAddDialog(QDialog):
         # ---- Categories tab ----
         self._cat_rows = []
         self._cat_rows_layout, cat_scroll = self._make_scroll_tab()
-        self.tabs.addTab(cat_scroll, "Categories")
+        self.tabs.addTab(cat_scroll, "Catégories")
         self._add_cat_row()
 
         # ---- Items tab ----
@@ -931,7 +1118,7 @@ class BulkAddDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         btns.addStretch()
         btns.addWidget(btn_cancel)
-        btn_create = QPushButton("Creer tout")
+        btn_create = QPushButton("Créer tout")
         btn_create.clicked.connect(self._create_all)
         btns.addWidget(btn_create)
         root.addLayout(btns)
@@ -995,7 +1182,7 @@ class BulkAddDialog(QDialog):
     def _add_cat_row(self):
         row_dict, h, btn_rm = self._make_row_widget(self._cat_rows, self._cat_rows_layout)
         name = QLineEdit()
-        name.setPlaceholderText("Nom de la categorie")
+        name.setPlaceholderText("Nom de la catégorie")
         h.addWidget(name, 1)
         h.addWidget(btn_rm)
         row_dict["name"] = name
@@ -1089,10 +1276,10 @@ class BulkAddDialog(QDialog):
                 result = self.api.create_item_option(item_id, payload)
                 (created := created + 1) if result else (failed := failed + 1)
 
-        parts = [f"{created} element(s) cree(s)"]
+        parts = [f"{created} élément(s) créé(s)"]
         if failed:
             parts.append(f"{failed} en erreur")
-        QMessageBox.information(self, "Resultat", " — ".join(parts) + ".")
+        QMessageBox.information(self, "Résultat", " — ".join(parts) + ".")
         self.accept()
 
 
@@ -1122,7 +1309,7 @@ class BulkDeleteDialog(QDialog):
             label = f"{cat['name']}   ({n} article{'s' if n != 1 else ''})"
             cb = self._make_check(label, cat["id"], self._cat_checks)
             cat_layout.addWidget(cb)
-        self.tabs.addTab(cat_scroll, "Categories")
+        self.tabs.addTab(cat_scroll, "Catégories")
 
         self._item_checks = []
         item_scroll, item_layout = self._make_check_tab()
@@ -1153,7 +1340,7 @@ class BulkDeleteDialog(QDialog):
         btn_all = QPushButton("Tout cocher")
         btn_all.setObjectName("btn-secondary")
         btn_all.clicked.connect(self._check_all)
-        btn_none = QPushButton("Tout decocher")
+        btn_none = QPushButton("Tout décocher")
         btn_none.setObjectName("btn-secondary")
         btn_none.clicked.connect(self._uncheck_all)
         sel_bar.addWidget(btn_all)
@@ -1231,7 +1418,7 @@ class BulkDeleteDialog(QDialog):
         n = len(cat_ids) + len(item_ids) + len(opt_ids)
 
         if QMessageBox.question(
-            self, "Confirmer", f"Supprimer {n} element(s) selectionne(s) ?",
+            self, "Confirmer", f"Supprimer {n} élément(s) sélectionné(s) ?",
             QMessageBox.Yes | QMessageBox.No,
         ) != QMessageBox.Yes:
             return
@@ -1244,10 +1431,10 @@ class BulkDeleteDialog(QDialog):
         for cid in cat_ids:
             (done := done + 1) if self.api.delete_category(cid) else (failed := failed + 1)
 
-        parts = [f"{done} element(s) supprime(s)"]
+        parts = [f"{done} élément(s) supprimé(s)"]
         if failed:
             parts.append(f"{failed} en erreur")
-        QMessageBox.information(self, "Resultat", " — ".join(parts) + ".")
+        QMessageBox.information(self, "Résultat", " — ".join(parts) + ".")
         self.accept()
 
 
@@ -1278,7 +1465,7 @@ class BulkEditDialog(QDialog):
         cat_scroll, cat_layout = self._make_scroll_tab()
         for cat in self._cats:
             self._add_cat_row(cat_layout, cat)
-        self.tabs.addTab(cat_scroll, "Categories")
+        self.tabs.addTab(cat_scroll, "Catégories")
 
         self._item_rows = []
         item_scroll, item_layout = self._make_scroll_tab()
@@ -1455,11 +1642,11 @@ class BulkEditDialog(QDialog):
                     else (failed := failed + 1)
 
         if updated == 0 and failed == 0:
-            QMessageBox.information(self, "Info", "Aucune modification detectee.")
+            QMessageBox.information(self, "Info", "Aucune modification détectée.")
             return
 
-        parts = [f"{updated} element(s) mis a jour"]
+        parts = [f"{updated} élément(s) mis à jour"]
         if failed:
             parts.append(f"{failed} en erreur")
-        QMessageBox.information(self, "Resultat", " — ".join(parts) + ".")
+        QMessageBox.information(self, "Résultat", " — ".join(parts) + ".")
         self.accept()

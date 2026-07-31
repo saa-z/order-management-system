@@ -6,10 +6,13 @@ import models
 import schemas
 import services
 from database import get_db
+from routers.auth import require_user, require_admin
 
+# Lecture du menu : tout utilisateur connecté. Écriture : admin (voir chaque route).
 router = APIRouter(
     prefix="/categories",
-    tags=["Categories"]
+    tags=["Categories"],
+    dependencies=[Depends(require_user)],
 )
 
 
@@ -42,7 +45,7 @@ def _build_filtered_category(cat: models.Category, include_deleted: bool) -> sch
                 for o in opts
             ],
             ingredients=[
-                schemas.IngredientRead(id=i.id, name=i.name)
+                schemas.IngredientRead(id=i.id, name=i.name, is_base=i.is_base)
                 for i in item.ingredients
             ],
         ))
@@ -60,7 +63,8 @@ def _build_filtered_category(cat: models.Category, include_deleted: bool) -> sch
 
 
 @router.post("/", response_model=schemas.CategoryRead, status_code=status.HTTP_201_CREATED)
-def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db),
+                    _admin: models.User = Depends(require_admin)):
     exists = db.query(models.Category).filter(
         models.Category.name == category.name,
         models.Category.deleted_at == None,
@@ -75,7 +79,8 @@ def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_
 
 
 @router.put("/{category_id}", response_model=schemas.CategoryRead)
-def update_category(category_id: int, category_update: schemas.CategoryUpdate, db: Session = Depends(get_db)):
+def update_category(category_id: int, category_update: schemas.CategoryUpdate, db: Session = Depends(get_db),
+                    _admin: models.User = Depends(require_admin)):
     db_category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found.")
@@ -105,7 +110,8 @@ def list_categories(include_deleted: bool = False, db: Session = Depends(get_db)
 
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(category_id: int, db: Session = Depends(get_db),
+                    _admin: models.User = Depends(require_admin)):
     result = services.soft_delete_category(db, category_id)
     if not result:
         raise HTTPException(status_code=404, detail="Category not found or already deleted.")
@@ -113,7 +119,8 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{category_id}/restore", response_model=schemas.CategoryRead)
-def restore_category(category_id: int, db: Session = Depends(get_db)):
+def restore_category(category_id: int, db: Session = Depends(get_db),
+                     _admin: models.User = Depends(require_admin)):
     result = services.restore_category(db, category_id)
     if not result:
         raise HTTPException(status_code=404, detail="Category not found or not deleted.")

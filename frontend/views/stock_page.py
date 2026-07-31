@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTreeWidget, QTreeWidgetItem, QLabel, QMessageBox,
-                               QHeaderView, QComboBox)
+                               QHeaderView, QSpinBox, QCheckBox)
 from PySide6.QtCore import Qt
 
 
@@ -108,6 +108,38 @@ class StockPage(QWidget):
             self.current_category = None
             self.items_tree.clear()
 
+    def _make_stock_widget(self, stock_value, id_key, id_val):
+        """Quantité (spinbox) OU case « N/A » quand le stock n'est pas suivi (None).
+
+        Les deux côte à côte : cocher N/A désactive la quantité, et inversement.
+        """
+        wrap = QWidget()
+        wrap.setStyleSheet("background: transparent;")
+        lay = QHBoxLayout(wrap)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(10)
+
+        spin = QSpinBox()
+        spin.setObjectName("stock-spin")
+        spin.setRange(0, 99999)
+        spin.setProperty(id_key, id_val)
+
+        cb = QCheckBox("N/A")
+        cb.setToolTip("Stock non suivi (illimité)")
+
+        is_na = stock_value is None
+        cb.setChecked(is_na)
+        spin.setValue(0 if is_na else int(stock_value))
+        spin.setDisabled(is_na)
+        cb.toggled.connect(spin.setDisabled)
+
+        lay.addWidget(spin, 1)
+        lay.addWidget(cb)
+
+        wrap.spin = spin
+        wrap.na = cb
+        return wrap
+
     def populate_items(self, category_name):
         self.items_tree.clear()
         items = self.categories_data.get(category_name, [])
@@ -120,57 +152,35 @@ class StockPage(QWidget):
 
             if options:
                 parent_item.setExpanded(True)
-
                 for opt in options:
                     child_item = QTreeWidgetItem([opt["name"]])
                     parent_item.addChild(child_item)
-
-                    combo = QComboBox()
-                    combo.setEditable(True)
-                    combo.addItems([str(i) for i in range(101)])
-                    combo.setCurrentText(str(opt["stock_quantity"]))
-
-                    combo.setProperty("option_id", opt["id"])
-                    combo.setProperty("is_option", True)
-
-                    self.items_tree.setItemWidget(child_item, 1, combo)
+                    wrap = self._make_stock_widget(opt.get("stock_quantity"), "option_id", opt["id"])
+                    self.items_tree.setItemWidget(child_item, 1, wrap)
             else:
-                combo = QComboBox()
-                combo.setEditable(True)
-                combo.addItems([str(i) for i in range(101)])
-                combo.setCurrentText(str(item_data.get("stock_quantity", 0)))
-
-                combo.setProperty("item_id", item_data["id"])
-                combo.setProperty("is_option", False)
-
-                self.items_tree.setItemWidget(parent_item, 1, combo)
+                wrap = self._make_stock_widget(item_data.get("stock_quantity"), "item_id", item_data["id"])
+                self.items_tree.setItemWidget(parent_item, 1, wrap)
 
     def save_changes(self):
         try:
             for i in range(self.items_tree.topLevelItemCount()):
                 parent_item = self.items_tree.topLevelItem(i)
 
-                combo = self.items_tree.itemWidget(parent_item, 1)
-                if combo:
-                    is_option = combo.property("is_option")
-                    if not is_option:
-                        item_id = combo.property("item_id")
-                        new_qty = int(combo.currentText())
-                        self.api.update_item_stock(item_id, new_qty)
+                wrap = self.items_tree.itemWidget(parent_item, 1)
+                if wrap:
+                    new_qty = None if wrap.na.isChecked() else wrap.spin.value()
+                    self.api.update_item_stock(wrap.spin.property("item_id"), new_qty)
 
                 for j in range(parent_item.childCount()):
                     child_item = parent_item.child(j)
-                    child_combo = self.items_tree.itemWidget(child_item, 1)
-                    if child_combo:
-                        option_id = child_combo.property("option_id")
-                        new_qty = int(child_combo.currentText())
-                        self.api.update_option_stock(option_id, new_qty)
+                    child_wrap = self.items_tree.itemWidget(child_item, 1)
+                    if child_wrap:
+                        new_qty = None if child_wrap.na.isChecked() else child_wrap.spin.value()
+                        self.api.update_option_stock(child_wrap.spin.property("option_id"), new_qty)
 
-            QMessageBox.information(self, "Succes", "Stocks mis a jour avec succes.")
+            QMessageBox.information(self, "Succès", "Stocks mis à jour avec succès.")
             self.fetch_data()
 
-        except ValueError:
-            QMessageBox.warning(self, "Erreur", "Veuillez entrer des quantites numeriques valides.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Une erreur inattendue s'est produite : {e}")
 

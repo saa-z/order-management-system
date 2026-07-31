@@ -7,19 +7,23 @@ import models
 import schemas
 import services
 from database import get_db
+from routers.auth import require_user, require_admin
 
 
 class SetIngredientsRequest(BaseModel):
     ingredient_names: List[str]
 
+# Lecture du menu : tout utilisateur connecté. Écriture : admin (voir chaque route).
 router = APIRouter(
     prefix="/items",
-    tags=["Items"]
+    tags=["Items"],
+    dependencies=[Depends(require_user)],
 )
 
 
 @router.post("/", response_model=schemas.ItemRead, status_code=status.HTTP_201_CREATED)
-def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
+def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db),
+                _admin: models.User = Depends(require_admin)):
     category = db.query(models.Category).filter(models.Category.id == item.category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Associated category not found.")
@@ -56,7 +60,8 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{item_id}", response_model=schemas.ItemRead)
-def update_item(item_id: int, item_update: schemas.ItemUpdate, db: Session = Depends(get_db)):
+def update_item(item_id: int, item_update: schemas.ItemUpdate, db: Session = Depends(get_db),
+                _admin: models.User = Depends(require_admin)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found.")
@@ -90,7 +95,8 @@ def update_item(item_id: int, item_update: schemas.ItemUpdate, db: Session = Dep
 
 
 @router.put("/{item_id}/restore", response_model=schemas.ItemRead)
-def restore_item(item_id: int, db: Session = Depends(get_db)):
+def restore_item(item_id: int, db: Session = Depends(get_db),
+                 _admin: models.User = Depends(require_admin)):
     result = services.restore_item(db, item_id)
     if not result:
         raise HTTPException(status_code=404, detail="Item not found or not deleted.")
@@ -114,7 +120,8 @@ def get_item(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{item_id}/ingredients", response_model=schemas.ItemRead)
-def set_item_ingredients(item_id: int, payload: SetIngredientsRequest, db: Session = Depends(get_db)):
+def set_item_ingredients(item_id: int, payload: SetIngredientsRequest, db: Session = Depends(get_db),
+                         _admin: models.User = Depends(require_admin)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found.")
@@ -138,7 +145,8 @@ def set_item_ingredients(item_id: int, payload: SetIngredientsRequest, db: Sessi
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_item(item_id: int, db: Session = Depends(get_db)):
+def delete_item(item_id: int, db: Session = Depends(get_db),
+                _admin: models.User = Depends(require_admin)):
     result = services.soft_delete_item(db, item_id)
     if not result:
         raise HTTPException(status_code=404, detail="Item not found or already deleted.")
@@ -150,7 +158,8 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
 # ==========================================
 
 @router.post("/{item_id}/options", response_model=schemas.ItemOptionRead, status_code=status.HTTP_201_CREATED)
-def create_item_option(item_id: int, option: schemas.ItemOptionCreate, db: Session = Depends(get_db)):
+def create_item_option(item_id: int, option: schemas.ItemOptionCreate, db: Session = Depends(get_db),
+                       _admin: models.User = Depends(require_admin)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found.")
@@ -166,7 +175,8 @@ def create_item_option(item_id: int, option: schemas.ItemOptionCreate, db: Sessi
 
 
 @router.put("/options/{option_id}", response_model=schemas.ItemOptionRead)
-def update_item_option(option_id: int, option_update: schemas.ItemOptionUpdate, db: Session = Depends(get_db)):
+def update_item_option(option_id: int, option_update: schemas.ItemOptionUpdate, db: Session = Depends(get_db),
+                       _admin: models.User = Depends(require_admin)):
     db_option = db.query(models.ItemOption).filter(models.ItemOption.id == option_id).first()
     if not db_option:
         raise HTTPException(status_code=404, detail="Option not found.")
@@ -179,7 +189,8 @@ def update_item_option(option_id: int, option_update: schemas.ItemOptionUpdate, 
 
 
 @router.put("/options/{option_id}/restore", response_model=schemas.ItemOptionRead)
-def restore_item_option(option_id: int, db: Session = Depends(get_db)):
+def restore_item_option(option_id: int, db: Session = Depends(get_db),
+                        _admin: models.User = Depends(require_admin)):
     result = services.restore_item_option(db, option_id)
     if not result:
         raise HTTPException(status_code=404, detail="Option not found or not deleted.")
@@ -187,7 +198,8 @@ def restore_item_option(option_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/options/{option_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_item_option(option_id: int, db: Session = Depends(get_db)):
+def delete_item_option(option_id: int, db: Session = Depends(get_db),
+                       _admin: models.User = Depends(require_admin)):
     result = services.soft_delete_item_option(db, option_id)
     if not result:
         raise HTTPException(status_code=404, detail="Option not found or already deleted.")

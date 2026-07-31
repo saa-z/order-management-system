@@ -15,14 +15,19 @@ def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
     ).first()
 
 
-def authenticate_user(db: Session, username: str) -> Optional[models.User]:
-    return get_user_by_username(db, username)
+def authenticate_user(db: Session, username: str, password: str) -> Optional[models.User]:
+    user = get_user_by_username(db, username)  # exclut déjà les révoqués (deleted_at)
+    if not user:
+        return None
+    if user.password != password:  # comparaison en clair (choix assumé)
+        return None
+    return user
 
 
 def create_user(db: Session, data: schemas.UserCreate) -> Optional[models.User]:
     if get_user_by_username(db, data.username):
         return None
-    user = models.User(username=data.username, role=data.role)
+    user = models.User(username=data.username, password=data.password, role=data.role)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -30,6 +35,7 @@ def create_user(db: Session, data: schemas.UserCreate) -> Optional[models.User]:
 
 
 def update_user(db: Session, user_id: int, data: schemas.UserUpdate) -> Optional[models.User]:
+    from datetime import datetime, timezone
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         return None
@@ -42,24 +48,35 @@ def update_user(db: Session, user_id: int, data: schemas.UserUpdate) -> Optional
         if existing:
             return None
         user.username = data.username
+    if data.password is not None:
+        user.password = data.password
     if data.role is not None:
         user.role = data.role
+    if data.active is not None:
+        # Révocation = soft-delete (on garde l'historique des commandes du user).
+        user.deleted_at = None if data.active else datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
     return user
 
 
-def list_users(db: Session) -> list[models.User]:
-    return db.query(models.User).filter(
-        models.User.deleted_at == None
-    ).order_by(models.User.username).all()
+def list_users(db: Session, include_revoked: bool = False) -> list[models.User]:
+    query = db.query(models.User)
+    if not include_revoked:
+        query = query.filter(models.User.deleted_at == None)
+    return query.order_by(models.User.username).all()
 
 
 def delete_user(db: Session, user_id: int) -> bool:
-    user = db.query(models.User).filter(models.User.id == user_id).first()
+    """Révocation = soft-delete (conserve l'historique des commandes)."""
+    from datetime import datetime, timezone
+    user = db.query(models.User).filter(
+        models.User.id == user_id,
+        models.User.deleted_at == None,
+    ).first()
     if not user:
         return False
-    db.delete(user)
+    user.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return True
 
@@ -155,7 +172,17 @@ def restore_category(db: Session, category_id: int):
     cat = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not cat or cat.deleted_at is None:
         return None
+    # Restauration en cascade : on ne remonte que les enfants supprimés au même
+    # instant que la catégorie (donc dans la même cascade de suppression).
+    # Les enfants supprimés indépendamment avant gardent leur deleted_at.
+    ts = cat.deleted_at
     cat.deleted_at = None
+    for item in cat.items:
+        if item.deleted_at == ts:
+            item.deleted_at = None
+            for opt in item.options:
+                if opt.deleted_at == ts:
+                    opt.deleted_at = None
     db.commit()
     db.refresh(cat)
     return cat
@@ -179,7 +206,12 @@ def restore_item(db: Session, item_id: int):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item or item.deleted_at is None:
         return None
+    # Restaure aussi les options supprimées dans la même cascade (même timestamp).
+    ts = item.deleted_at
     item.deleted_at = None
+    for opt in item.options:
+        if opt.deleted_at == ts:
+            opt.deleted_at = None
     db.commit()
     db.refresh(item)
     return item

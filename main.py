@@ -1,5 +1,9 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 import models
 from database import engine
@@ -33,4 +37,10 @@ app.include_router(ingredients_router.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "San Giorgio Order API is running."}
+    # Racine → page web (login). L'API reste sous ses préfixes (/auth, /orders, …).
+    return RedirectResponse(url="/web/login.html")
+
+
+web_dir = os.path.join(os.path.dirname(__file__), "web")
+os.makedirs(web_dir, exist_ok=True)
+app.mount("/web", StaticFiles(directory=web_dir, html=True), name="web")

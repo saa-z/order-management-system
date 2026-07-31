@@ -35,9 +35,15 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    # Mot de passe stocké en clair (choix assumé : les admins doivent pouvoir le lire).
+    password: Mapped[Optional[str]] = mapped_column(String, default=None)
     role: Mapped[UserRole] = mapped_column(default=UserRole.SERVER)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     deleted_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+
+    @property
+    def active(self) -> bool:
+        return self.deleted_at is None
 
 class Category(Base):
     __tablename__ = "categories"
@@ -172,6 +178,7 @@ class Ingredient(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, unique=True, index=True)
+    is_base: Mapped[bool] = mapped_column(default=False)
 
 
 class ItemIngredient(Base):
