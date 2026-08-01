@@ -5,9 +5,10 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QCompleter, QScrollArea, QCheckBox)
 from PySide6.QtCore import Qt, QDate, QStringListModel
 from PySide6.QtGui import QColor, QTextDocument
-from PySide6.QtPrintSupport import QPrinter, QPrintDialog
+from PySide6.QtPrintSupport import QPrinter
 
 from views.option_picker_dialog import OptionPickerDialog
+from print_worker import build_kitchen_html, build_receipt_html
 
 
 class _PassThroughWheelTable(QTableWidget):
@@ -498,10 +499,15 @@ class OrderDetailDialog(QDialog):
             btn_print_batch.setObjectName("btn-secondary")
             btn_print_batch.clicked.connect(self._open_batch_print_dialog)
             h2.addWidget(btn_print_batch)
-        btn_print_all = QPushButton("Facturer")
-        btn_print_all.setObjectName("btn-secondary")
-        btn_print_all.clicked.connect(self._print_all)
-        h2.addWidget(btn_print_all)
+        btn_print_receipt = QPushButton("Imprimer reçu")
+        btn_print_receipt.setObjectName("btn-secondary")
+        btn_print_receipt.clicked.connect(self._print_all)
+        h2.addWidget(btn_print_receipt)
+        if status_key == "pending":
+            btn_pay = QPushButton("Marquer payée")
+            btn_pay.setObjectName("btn-primary")
+            btn_pay.clicked.connect(self._mark_paid)
+            h2.addWidget(btn_pay)
         btn_close = QPushButton("Fermer")
         btn_close.setObjectName("btn-secondary")
         btn_close.clicked.connect(self.accept)
@@ -516,90 +522,31 @@ class OrderDetailDialog(QDialog):
         if not selected:
             QMessageBox.warning(self, "Aucune sélection", "Sélectionnez au moins un envoi.")
             return
-        html_parts = [self._build_batch_html(bn, self._batches[bn]) for bn in selected]
-        combined = "<br><hr style='margin:12px 0'><br>".join(html_parts)
-        self._do_print(f"<html><body>{combined}</body></html>")
-
-    def _build_batch_html(self, batch_num, batch_items):
-        order = self._order
-        date_raw = str(order.get("created_at", ""))
-        date_display = date_raw[:16].replace("T", " ") if "T" in date_raw else date_raw
-        type_text = ORDER_TYPE_LABELS.get(order.get("order_type", ""), "")
-        lines = [
-            f"<div style='font-family:monospace; font-size:12px;'>",
-            f"<h2 style='margin:0'>San Giorgio — Bon {batch_num}</h2>",
-            f"<p>Commande #{order.get('id')} | {date_display} | {type_text}</p>",
-        ]
-        if order.get("table_number"):
-            lines.append(f"<p>Table : {order['table_number']}</p>")
-        if order.get("covers"):
-            lines.append(f"<p>Couverts : {order['covers']}</p>")
-        user_data = order.get("created_by")
-        if user_data:
-            lines.append(f"<p>Serveur : {user_data.get('username', '')}</p>")
-        lines.append("<hr><table width='100%' cellspacing='0'>")
-        lines.append("<tr><th align='left'>Article</th><th align='left'>Options</th><th align='center'>Qté</th></tr>")
-        for item in batch_items:
-            name = item.get("item_name_snapshot", "")
-            opts = item.get("selected_options", [])
-            opts_text = ", ".join(f"{o.get('option_name_snapshot', '')} x{o.get('quantity', 1)}" for o in opts) if opts else ""
-            qty = item.get("quantity", 1)
-            lines.append(f"<tr><td>{name}</td><td style='color:#666'>{opts_text}</td><td align='center'>{qty}</td></tr>")
-            if item.get("comment"):
-                lines.append(f"<tr><td colspan='3' style='color:#888; padding-left:12px'>↳ {item['comment']}</td></tr>")
-        lines.append("</table></div>")
-        return "".join(lines)
-
-    def _build_receipt_html(self):
-        order = self._order
-        date_raw = str(order.get("created_at", ""))
-        date_display = date_raw[:16].replace("T", " ") if "T" in date_raw else date_raw
-        type_text = ORDER_TYPE_LABELS.get(order.get("order_type", ""), "")
-        lines = [
-            "<html><body style='font-family:monospace; font-size:12px;'>",
-            f"<h2 style='margin:0'>San Giorgio</h2>",
-            f"<p>Commande #{order.get('id')} | {date_display}</p>",
-            f"<p>Type : {type_text}</p>",
-        ]
-        if order.get("table_number"):
-            lines.append(f"<p>Table : {order['table_number']}</p>")
-        if order.get("covers"):
-            lines.append(f"<p>Couverts : {order['covers']}</p>")
-        if order.get("customer_name"):
-            lines.append(f"<p>Client : {order['customer_name']}</p>")
-        lines.append("<hr><table width='100%' cellspacing='0'>")
-        lines.append("<tr><th align='left'>Article</th><th align='left'>Options</th><th align='center'>Qté</th><th align='right'>P.U.</th><th align='right'>Total</th></tr>")
-        items_data = order.get("items", [])
-        for item in items_data:
-            name = item.get("item_name_snapshot", "")
-            opts = item.get("selected_options", [])
-            opts_text = ", ".join(f"{o.get('option_name_snapshot', '')} x{o.get('quantity', 1)}" for o in opts) if opts else ""
-            qty = item.get("quantity", 1)
-            raw_up = item.get("unit_price")
-            up = float(raw_up) if raw_up is not None else 0.0
-            lines.append(f"<tr><td>{name}</td><td style='color:#666'>{opts_text}</td><td align='center'>{qty}</td><td align='right'>{up:.2f} €</td><td align='right'>{up * qty:.2f} €</td></tr>")
-            if item.get("comment"):
-                lines.append(f"<tr><td colspan='5' style='color:#888; padding-left:12px'>↳ {item['comment']}</td></tr>")
-        raw_total = order.get("total_price")
-        total = float(raw_total) if raw_total is not None else 0.0
-        lines.append(f"</table><hr><p align='right'><b>TOTAL : {total:.2f} €</b></p>")
-        lines.append("</body></html>")
-        return "".join(lines)
+        for bn in selected:
+            self._do_print(build_kitchen_html(self._order, bn))
 
     def _do_print(self, html: str):
         printer = QPrinter(QPrinter.HighResolution)
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QPrintDialog.Accepted:
-            return
         doc = QTextDocument()
         doc.setHtml(html)
         doc.print_(printer)
 
-    def _print_batch(self, batch_num, batch_items):
-        self._do_print(self._build_batch_html(batch_num, batch_items))
-
     def _print_all(self):
-        self._do_print(self._build_receipt_html())
+        self._do_print(build_receipt_html(self._order))
+
+    def _mark_paid(self):
+        reply = QMessageBox.question(
+            self, "Marquer comme payée",
+            f"Marquer la commande #{self._order_id} comme payée ?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        result = self._api.update_order_status(self._order_id, "paid")
+        if result:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", "Impossible de changer le statut.")
 
     def _cancel_order(self):
         reply = QMessageBox.question(

@@ -11,6 +11,7 @@ from routers import categories, items, orders
 from routers import auth as auth_router
 from routers import users as users_router
 from routers import ingredients as ingredients_router
+from routers import print_jobs as print_jobs_router
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -33,6 +34,7 @@ app.include_router(categories.router)
 app.include_router(items.router)
 app.include_router(orders.router)
 app.include_router(ingredients_router.router)
+app.include_router(print_jobs_router.router)
 
 
 @app.get("/")

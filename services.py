@@ -4,6 +4,21 @@ from typing import Optional
 from sqlalchemy import func as sqlfunc
 from sqlalchemy.orm import Session, joinedload
 import models, schemas
+
+
+# ==========================================
+# PRINT JOBS (file d'impression centralisée)
+# ==========================================
+
+def queue_print_job(db: Session, order_id: int, job_type: str, batch: Optional[int] = None):
+    """Ajoute un job d'impression à traiter par le central."""
+    job = models.PrintJob(order_id=order_id, job_type=job_type, batch=batch, status="pending")
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 # ==========================================
 # USERS
 # ==========================================

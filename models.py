@@ -87,6 +87,10 @@ class Item(Base):
         return [link.ingredient for link in self.ingredient_links]
 
     @property
+    def category_name(self) -> str:
+        return self.category.name if self.category else ""
+
+    @property
     def is_in_stock(self) -> bool:
         if self.deleted_at is not None:
             return False
@@ -201,3 +205,17 @@ class OrderItemModification(Base):
 
     order_item: Mapped["OrderItem"] = relationship(back_populates="modifications")
     ingredient: Mapped["Ingredient"] = relationship()
+
+
+class PrintJob(Base):
+    """File d'impression : le central (app desktop) interroge les jobs en attente
+    et imprime lui-même (l'imprimante est sur le central)."""
+    __tablename__ = "print_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    job_type: Mapped[str] = mapped_column(String)          # "kitchen", "receipt", "cancel"
+    batch: Mapped[Optional[int]] = mapped_column(default=None)  # bon concerné (kitchen)
+    status: Mapped[str] = mapped_column(String, default="pending", index=True)  # pending / done
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    printed_at: Mapped[Optional[datetime]] = mapped_column(default=None)

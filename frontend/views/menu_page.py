@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                               QPushButton, QLabel, QFrame, QSpacerItem, QSizePolicy)
+                               QPushButton, QLabel, QFrame, QSpacerItem, QSizePolicy,
+                               QMessageBox)
 from PySide6.QtCore import Qt
+
+from cash_drawer import open_cash_drawer
 
 
 class MenuPage(QWidget):
@@ -58,12 +61,24 @@ class MenuPage(QWidget):
         btn_items.clicked.connect(lambda: self.main_window.go_to("ITEMS"))
         grid.addWidget(btn_items, 1, 1)
 
-        btn_access = QPushButton("Gestion des acces")
+        btn_access = QPushButton("Gestion des accès")
         btn_access.setObjectName("menu-card")
         btn_access.setMinimumHeight(80)
         btn_access.setCursor(Qt.PointingHandCursor)
         btn_access.clicked.connect(lambda: self.main_window.go_to("ACCESS"))
         grid.addWidget(btn_access, 2, 0)
 
+        btn_cash = QPushButton("Ouvrir la caisse")
+        btn_cash.setObjectName("menu-card")
+        btn_cash.setMinimumHeight(80)
+        btn_cash.setCursor(Qt.PointingHandCursor)
+        btn_cash.clicked.connect(self._open_cash_drawer)
+        grid.addWidget(btn_cash, 2, 1)
+
         outer.addLayout(grid, stretch=1)
         outer.addStretch()
+
+    def _open_cash_drawer(self):
+        ok, msg = open_cash_drawer()
+        if not ok:
+            QMessageBox.warning(self, "Caisse", msg)

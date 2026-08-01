@@ -122,32 +122,32 @@ class AccessPage(QWidget):
                     it.setForeground(QColor("#A06060"))
 
             self.table.setItem(row, 0, name_item)
-            self.table.setCellWidget(row, 1, self._make_password_cell(u.get("password") or ""))
+            self.table.setCellWidget(row, 1, self._make_password_cell(u.get("password") or "", u))
             self.table.setItem(row, 2, role_item)
             self.table.setItem(row, 3, status_item)
             self.table.setItem(row, 4, date_item)
             self.table.setItem(row, 5, del_item)
             self.table.setCellWidget(row, 6, self._make_actions(u))
 
-    def _make_password_cell(self, password):
+    def _make_password_cell(self, password, user):
         w = QWidget()
         w.setStyleSheet("background: transparent;")
         h = QHBoxLayout(w)
         h.setContentsMargins(8, 0, 6, 0)
-        h.setSpacing(6)
+        h.setSpacing(4)
 
         dots = "●" * max(len(password), 6) if password else "—"
         lbl = QLabel(dots)
         h.addWidget(lbl)
         h.addStretch()
 
-        btn = QPushButton()
-        btn.setObjectName("btn-icon")
-        btn.setIconSize(QSize(14, 14))
-        btn.setFixedSize(28, 24)
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.setToolTip("Afficher / masquer le mot de passe")
-        btn.setIcon(qta.icon("fa5s.eye", color="#A09888"))
+        btn_eye = QPushButton()
+        btn_eye.setObjectName("btn-icon")
+        btn_eye.setIconSize(QSize(14, 14))
+        btn_eye.setFixedSize(28, 24)
+        btn_eye.setCursor(Qt.PointingHandCursor)
+        btn_eye.setToolTip("Afficher / masquer")
+        btn_eye.setIcon(qta.icon("fa5s.eye", color="#A09888"))
 
         shown = {"v": False}
 
@@ -155,14 +155,25 @@ class AccessPage(QWidget):
             shown["v"] = not shown["v"]
             if shown["v"]:
                 lbl.setText(password or "—")
-                btn.setIcon(qta.icon("fa5s.eye-slash", color="#D4A365"))
+                btn_eye.setIcon(qta.icon("fa5s.eye-slash", color="#D4A365"))
             else:
                 lbl.setText(dots)
-                btn.setIcon(qta.icon("fa5s.eye", color="#A09888"))
+                btn_eye.setIcon(qta.icon("fa5s.eye", color="#A09888"))
 
-        btn.clicked.connect(toggle)
+        btn_eye.clicked.connect(toggle)
+
+        btn_edit = QPushButton()
+        btn_edit.setObjectName("btn-icon")
+        btn_edit.setIconSize(QSize(13, 13))
+        btn_edit.setFixedSize(28, 24)
+        btn_edit.setCursor(Qt.PointingHandCursor)
+        btn_edit.setToolTip("Changer le mot de passe")
+        btn_edit.setIcon(qta.icon("fa5s.pen", color="#A09888"))
+        btn_edit.clicked.connect(lambda: self._change_password(user))
+
         if password:
-            h.addWidget(btn)
+            h.addWidget(btn_eye)
+        h.addWidget(btn_edit)
         return w
 
     def _make_actions(self, user):
@@ -202,6 +213,40 @@ class AccessPage(QWidget):
     # ==========================================
     # ACTIONS
     # ==========================================
+
+    def _change_password(self, user):
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Mot de passe — {user['username']}")
+        dlg.setMinimumWidth(320)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+        form = QFormLayout()
+        pwd_edit = QLineEdit(user.get("password") or "")
+        pwd_edit.setPlaceholderText("Nouveau mot de passe")
+        form.addRow("Mot de passe :", pwd_edit)
+        layout.addLayout(form)
+        btns = QHBoxLayout()
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.setObjectName("btn-secondary")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_ok = QPushButton("Enregistrer")
+        btn_ok.clicked.connect(dlg.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        layout.addLayout(btns)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        new_pwd = pwd_edit.text().strip()
+        if not new_pwd:
+            QMessageBox.warning(self, "Validation", "Le mot de passe ne peut pas être vide.")
+            return
+        result = self.api.update_user(user["id"], {"password": new_pwd})
+        if isinstance(result, dict) and result.get("error"):
+            QMessageBox.warning(self, "Erreur", result["error"])
+        elif result:
+            self.load_users()
+        else:
+            QMessageBox.warning(self, "Erreur", "Impossible de modifier le mot de passe.")
 
     def _create_user(self):
         dlg = UserDialog(self)

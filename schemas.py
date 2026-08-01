@@ -138,6 +138,7 @@ class ItemUpdate(BaseModel):
 class ItemRead(ItemBase):
     id: int
     is_in_stock: bool = True
+    category_name: Optional[str] = None
     options: List[ItemOptionRead] = []
     ingredients: List[IngredientRead] = []
     created_at: Optional[datetime] = None
@@ -269,3 +270,18 @@ class OrderRead(OrderBase):
 
 OrderRead.model_rebuild()
 OrderItemRead.model_rebuild()
+
+
+# ==========================================
+# 7. PRINT JOBS (file d'impression centralisée)
+# ==========================================
+
+class PrintJobRead(BaseModel):
+    id: int
+    order_id: int
+    job_type: str
+    batch: Optional[int] = None
+    status: str
+    created_at: datetime
+    printed_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)

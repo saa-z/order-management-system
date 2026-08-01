@@ -2,6 +2,7 @@ import os
 import sys
 from PySide6.QtWidgets import QApplication
 from views.main_window import MainWindow
+from print_worker import PrintWorker
 
 
 def main():
@@ -21,6 +22,10 @@ def main():
 
     window = MainWindow()
     window.show()
+
+    # Ouvrière d'impression : le central imprime les jobs créés par les appareils distants.
+    print_worker = PrintWorker(window.api_client)
+
     sys.exit(app.exec())
 
 

@@ -193,6 +193,38 @@ class ApiClient:
             print(f"Error fetching orders: {e}")
             return []
 
+    def get_order(self, order_id):
+        try:
+            response = httpx.get(f"{self.base_url}/orders/{order_id}", timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error fetching order: {e}")
+            return None
+
+    # ==========================================
+    # PRINT JOBS (file d'impression — ouvrière du central)
+    # ==========================================
+
+    def get_print_jobs(self):
+        try:
+            response = httpx.get(f"{self.base_url}/print-jobs/",
+                                 params={"status_filter": "pending"}, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"Error fetching print jobs: {e}")
+            return []
+
+    def mark_print_done(self, job_id):
+        try:
+            response = httpx.post(f"{self.base_url}/print-jobs/{job_id}/done", timeout=self.timeout)
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"Error marking print job done: {e}")
+            return False
+
     def create_order(self, order_data):
         try:
             response = httpx.post(f"{self.base_url}/orders/", json=order_data, timeout=self.timeout)
