@@ -5,13 +5,11 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QButtonGroup,
                                QListWidget, QListWidgetItem)
 from PySide6.QtCore import Qt, QTime
-from PySide6.QtGui import QTextDocument
-from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from collections import defaultdict
-from datetime import datetime
-
 from views.order_type_dialog import OrderTypeDialog
 from views.option_picker_dialog import OptionPickerDialog
+from cash_drawer import send_raw
+from escpos_tickets import build_kitchen_ticket, build_receipt_ticket
 
 
 def _format_modifications_display(mods):
@@ -805,174 +803,16 @@ class PosOrderPage(QWidget):
             return
         order_id = self._current_order["id"]
         self.api.update_order_status(order_id, "paid")
-
-        order = self._current_order
-        now = datetime.now().strftime("%d/%m/%Y %H:%M")
-        type_labels = {"eat_in": "SUR PLACE", "take_away": "A EMPORTER"}
-        seating_labels = {"indoor": "Salle", "outdoor": "Terrasse"}
-
-        info_lines = [
-            f"<b>Commande :</b> #{order_id}",
-            f"<b>Type :</b> {type_labels.get(order.get('order_type', ''), '')}",
-        ]
-        if order.get("seating_location"):
-            info_lines.append(f"<b>Emplacement :</b> {seating_labels.get(order['seating_location'], '')}")
-        if order.get("table_number"):
-            info_lines.append(f"<b>Table :</b> {order['table_number']}")
-        if order.get("covers"):
-            info_lines.append(f"<b>Couverts :</b> {order['covers']}")
-        if order.get("pickup_time"):
-            info_lines.append(f"<b>Retrait :</b> {order['pickup_time']}")
-        if order.get("customer_name"):
-            info_lines.append(f"<b>Client :</b> {order['customer_name']}")
-        if order.get("customer_phone"):
-            info_lines.append(f"<b>Tel :</b> {order['customer_phone']}")
-        info_html = "<br>".join(info_lines)
-
-        rows_html = ""
-        items_data = order.get("items", [])
-        categorized: dict = {}
-        for it in items_data:
-            cat = "AUTRES"
-            name = it.get("item_name_snapshot", "")
-            for c_name, c_items in self.categories_data.items():
-                if any(ci.get("name") == name for ci in c_items):
-                    cat = c_name.upper()
-                    break
-            categorized.setdefault(cat, []).append(it)
-
-        total = 0.0
-        for cat, c_items in categorized.items():
-            rows_html += f'<tr><td colspan="3" class="cat">{cat}</td></tr>'
-            for it in c_items:
-                name = it.get("item_name_snapshot", "")
-                opts = it.get("selected_options", [])
-                if opts:
-                    opts_str = ", ".join(o.get("option_name_snapshot", "") for o in opts)
-                    name += f" <span class='opt'>({opts_str})</span>"
-                qty = it.get("quantity", 1)
-                up = float(it.get("unit_price") or 0)
-                supp = sum(
-                    float(m.get("unit_price") or 0)
-                    for m in (it.get("modifications") or [])
-                    if m.get("modification_type") == "add"
-                )
-                line = qty * (up + supp)
-                total += line
-                rows_html += f'<tr><td>{name}</td><td class="r">{qty}</td><td class="r">{line:.2f} €</td></tr>'
-
-        html = f"""<html><head><style>
-            body {{ font-family: Arial, sans-serif; font-size: 8pt; color: #000; margin: 0; padding: 0; }}
-            .receipt {{ max-width: 72mm; margin: 0 auto; }}
-            .header {{ text-align: center; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 2px solid #000; }}
-            .header h2 {{ font-size: 12pt; margin: 0; letter-spacing: 1px; }}
-            .header p {{ font-size: 7pt; margin: 1px 0 0 0; }}
-            .info {{ font-size: 7pt; padding: 2px 0; border-bottom: 1px solid #000; margin-bottom: 3px; line-height: 1.3; }}
-            .date {{ font-size: 7pt; text-align: right; margin-bottom: 2px; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            .cat {{ font-weight: bold; font-size: 7pt; text-transform: uppercase; padding: 2px 3px; border-top: 1px solid #000; }}
-            td {{ padding: 1px 3px; font-size: 8pt; line-height: 1.2; }}
-            .r {{ text-align: right; white-space: nowrap; }}
-            .opt {{ font-size: 6pt; }}
-            .total {{ border-top: 2px solid #000; margin-top: 4px; padding-top: 3px; text-align: right; font-size: 11pt; font-weight: bold; }}
-            .footer {{ text-align: center; font-size: 7pt; margin-top: 6px; padding-top: 3px; border-top: 1px dashed #000; }}
-        </style></head><body>
-        <div class="receipt">
-            <div class="header"><h2>SAN GIORGIO</h2><p>Pizzeria - Restaurant Italien</p></div>
-            <div class="date">{now}</div>
-            <div class="info">{info_html}</div>
-            <table>{rows_html}</table>
-            <div class="total">TOTAL : {total:.2f} €</div>
-            <div class="footer">Merci de votre visite !<br>A bientot chez San Giorgio</div>
-        </div></body></html>"""
-
-        self._print_html(html)
+        ticket = build_receipt_ticket(self._current_order)
+        ok, msg = send_raw(ticket)
+        if not ok:
+            QMessageBox.warning(self, "Impression", f"Erreur impression reçu : {msg}")
         self._reset_order()
 
-    def _print_html(self, html):
-        printer = QPrinter(QPrinter.HighResolution)
-        print_dialog = QPrintDialog(printer, self)
-        if print_dialog.exec() != QDialog.Accepted:
-            return False
-        doc = QTextDocument()
-        doc.setHtml(html)
-        doc.print_(printer)
-        return True
-
-    def _get_kitchen_info(self, order_id):
-        type_labels = {"eat_in": "SUR PLACE", "take_away": "A EMPORTER"}
-        seating_labels = {"indoor": "Salle", "outdoor": "Terrasse"}
-        now = datetime.now().strftime("%H:%M")
-
-        header = f"<b>#{order_id}</b>"
-        if self.order_type == "eat_in":
-            header += f" &nbsp; Table {self.spin_table.value()}"
-
-        lines = [
-            f"<div style='font-size:10pt;text-align:right;'>{now}</div>",
-            f"<div style='font-size:11pt;'>{header}</div>",
-            f"<div>{type_labels.get(self.order_type, self.order_type)}</div>",
-        ]
-        if self.seating_location:
-            lines.append(f"<div>{seating_labels.get(self.seating_location, '')}</div>")
-        if self.order_type == "take_away":
-            pt = self.pickup_time_edit.time().toString("HH:mm")
-            lines.append(f"<div><b>Retrait : {pt}</b></div>")
-            name = self.customer_name_edit.text().strip()
-            if name:
-                lines.append(f"<div>{name}</div>")
-        return "\n".join(lines)
-
     def print_kitchen_ticket(self, result, categorized_items, sorted_categories):
-        order_id = result.get("id", "")
-        info_html = self._get_kitchen_info(order_id)
-
-        rows_html = ""
-        for cat in sorted_categories:
-            total_qty = sum(item["quantity"] for item in categorized_items[cat])
-            rows_html += f'<tr><td colspan="2" class="cat">{cat} ({total_qty})</td></tr>'
-
-            for item in categorized_items[cat]:
-                details = f"<b>{item['name']}</b>"
-                if item.get("selected_options"):
-                    opts = self._format_selected_options_display(item["selected_options"])
-                    details += f"<br><span class='opt'>{opts}</span>"
-                if item.get("modifications"):
-                    for mod in item["modifications"]:
-                        t = mod.get("modification_type", "")
-                        n = mod.get("ingredient_name", "?")
-                        if t == "base_change":
-                            details += f"<br><span class='mod-base'>Base : {n}</span>"
-                        elif t == "remove":
-                            details += f"<br><span class='mod-rm'>Retrait : {n}</span>"
-                        elif t == "add":
-                            details += f"<br><span class='mod-add'>Supplément : {n}</span>"
-                if item.get("comment"):
-                    details += f"<br><i class='cmt'>{item['comment']}</i>"
-
-                rows_html += f'<tr><td class="qty">x{item["quantity"]}</td><td>{details}</td></tr>'
-
-        html = f"""<html><head><style>
-            body {{ font-family: Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; padding: 0; }}
-            .receipt {{ max-width: 72mm; margin: 0 auto; }}
-            h2 {{ text-align: center; font-size: 12pt; margin: 0 0 3px 0; padding-bottom: 3px; border-bottom: 2px solid #000; }}
-            .info {{ font-size: 8pt; padding: 3px 0; border-bottom: 1px solid #000; margin-bottom: 3px; line-height: 1.3; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            .cat {{ font-weight: bold; font-size: 8pt; text-transform: uppercase; padding: 2px 3px; border-top: 1px solid #000; border-bottom: 1px dashed #000; }}
-            td {{ padding: 2px 3px; vertical-align: top; font-size: 9pt; line-height: 1.2; }}
-            .qty {{ font-weight: bold; font-size: 11pt; width: 15%; text-align: center; }}
-            .opt {{ font-size: 7pt; }}
-            .cmt {{ font-size: 7pt; color: #444; }}
-            .mod-base {{ font-size: 7pt; font-style: italic; color: #555; }}
-            .mod-rm {{ font-size: 7pt; color: #c00; font-weight: bold; }}
-            .mod-add {{ font-size: 7pt; color: #080; font-weight: bold; }}
-        </style></head><body>
-        <div class="receipt">
-            <h2>BON DE CUISINE</h2>
-            <div class="info">{info_html}</div>
-            <table>{rows_html}</table>
-        </div>
-        </body></html>"""
-
-        if self._print_html(html):
+        ticket = build_kitchen_ticket(result, batch=1)
+        ok, msg = send_raw(ticket)
+        if ok:
             QMessageBox.information(self, "Cuisine", "Commande envoyée en cuisine avec succès !")
+        else:
+            QMessageBox.warning(self, "Impression", f"Erreur impression bon cuisine : {msg}")
