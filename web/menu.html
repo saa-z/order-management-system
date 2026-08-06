@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1A1714">
+<title>San Giorgio — Menu</title>
+<link rel="stylesheet" href="/web/app.css">
+<style>
+  .menu-wrap { flex: 1; display: flex; flex-direction: column; padding: 22px 18px; gap: 16px; }
+  .menu-hello { margin: 6px 2px 4px; }
+  .menu-hello .h { font-size: 22px; font-weight: 800; }
+  .menu-hello .s { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .tile {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 18px;
+    padding: 26px 22px; display: flex; align-items: center; gap: 18px; text-decoration: none; color: var(--text);
+  }
+  .tile:active { border-color: var(--gold2); background: var(--bg3); }
+  .tile .ico { font-size: 40px; width: 60px; text-align: center; }
+  .tile .txt .t { font-size: 20px; font-weight: 700; }
+  .tile .txt .d { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .tile .arrow { margin-left: auto; color: var(--gold); font-size: 26px; }
+  .tile-order { border-left: 4px solid var(--wine); }
+  .tile-hist { border-left: 4px solid var(--gold2); }
+</style>
+</head>
+<body>
+<header class="app-header" id="hdr"></header>
+
+<div class="menu-wrap">
+  <div class="menu-hello">
+    <div class="h" id="hello">Bonjour</div>
+    <div class="s">Que veux-tu faire ?</div>
+  </div>
+
+  <a class="tile tile-order" href="/web/pos.html">
+    <span class="ico">🧾</span>
+    <span class="txt"><div class="t">Prendre une commande</div><div class="d">Salle ou à emporter</div></span>
+    <span class="arrow">›</span>
+  </a>
+
+  <a class="tile tile-hist" href="/web/history.html">
+    <span class="ico">📚</span>
+    <span class="txt"><div class="t">Historique des commandes</div><div class="d">Consulter et gérer les commandes</div></span>
+    <span class="arrow">›</span>
+  </a>
+</div>
+
+<script src="/web/app.js"></script>
+<script>
+  if (!SG.requireAuth()) { }
+  document.getElementById('hdr').innerHTML = renderHeader('menu');
+  const u = SG.user() || {};
+  document.getElementById('hello').textContent = 'Bonjour ' + (u.username || '');
+</script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1A1714">
+<title>San Giorgio — Commande</title>
+<link rel="stylesheet" href="/web/app.css">
+<style>
+  .ordinfo { background: var(--bg2); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .ordinfo .lbl { color: var(--gold); font-weight: 700; }
+  .ordinfo .edit { margin-left: auto; background: var(--bg3); border: 1px solid var(--line); color: var(--text2); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+
+  .cats { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px; -webkit-overflow-scrolling: touch; }
+  .cats::-webkit-scrollbar { display: none; }
+  .cat-tab { flex: 0 0 auto; background: var(--bg2); border: 1px solid var(--line); color: var(--text2); border-radius: 20px; padding: 9px 16px; font-size: 14px; white-space: nowrap; }
+  .cat-tab.on { background: var(--gold2); color: var(--bg); border-color: var(--gold2); font-weight: 700; }
+
+  .items { flex: 1; overflow-y: auto; padding: 4px 12px 120px; }
+  .item {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+  }
+  .item:active { border-color: var(--gold2); }
+  .item .nm { flex: 1; font-size: 16px; font-weight: 600; }
+  .item .pr { color: var(--gold); font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .item.out { opacity: .45; }
+  .item .tag { font-size: 11px; color: var(--text3); }
+
+  .empty { text-align: center; color: var(--text3); padding: 40px 20px; font-size: 14px; }
+
+  /* Cart bar */
+  #cartbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--wine); color: #fff; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 12px; font-weight: 700;
+    box-shadow: 0 -6px 20px rgba(0,0,0,.35);
+  }
+  #cartbar.hidden { display: none; }
+  #cartbar .count { background: #fff; color: var(--wine); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  #cartbar .go { margin-left: auto; font-size: 15px; }
+
+  .cart-line { padding: 12px 0; border-bottom: 1px solid var(--bg3); }
+  .cart-line .top { display: flex; align-items: flex-start; gap: 10px; }
+  .cart-line .nm { flex: 1; font-size: 15px; font-weight: 600; }
+  .cart-line .mods { font-size: 12px; color: var(--gold2); margin-top: 3px; }
+  .cart-line .cmt { font-size: 12px; color: var(--text3); font-style: italic; margin-top: 2px; }
+  .cart-line .pr { color: var(--gold); font-weight: 700; white-space: nowrap; }
+  .cart-line .row2 { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .cart-line .rm { margin-left: auto; background: none; border: none; color: var(--red2); font-size: 20px; }
+  .total-row { display: flex; align-items: center; padding: 14px 0 4px; font-size: 20px; font-weight: 800; }
+  .total-row .g { color: var(--gold); margin-left: auto; }
+
+  .type-choice { display: flex; gap: 10px; margin-bottom: 8px; }
+  .type-choice .btn { font-size: 15px; }
+</style>
+</head>
+<body>
+<header class="app-header" id="hdr"></header>
+
+<div class="ordinfo" id="ordinfo" onclick="openTypeSheet()">
+  <span class="lbl" id="ord-mode">—</span>
+  <span id="ord-detail" class="muted"></span>
+  <button class="edit">Modifier</button>
+</div>
+
+<div class="cats" id="cats"></div>
+<div class="items" id="items"><div class="empty">Choisis une catégorie.</div></div>
+
+<div id="cartbar" class="hidden" onclick="openCartSheet()">
+  <span class="count" id="cart-count">0</span>
+  <span>Panier</span>
+  <span class="go" id="cart-total">0.00 €</span>
+</div>
+
+<!-- Sheet générique -->
+<div class="sheet-backdrop" id="backdrop">
+  <div class="sheet" id="sheet">
+    <div class="sheet-head"><h3 id="sheet-title"></h3><button class="x" onclick="closeSheet()">×</button></div>
+    <div class="sheet-body" id="sheet-body"></div>
+    <div class="sheet-foot" id="sheet-foot"></div>
+  </div>
+</div>
+
+<script src="/web/app.js"></script>
+<script>
+if (!SG.requireAuth()) { /* redirigé */ }
+document.getElementById('hdr').innerHTML = renderHeader('pos');
+
+let CATS = [];        // catégories avec items
+let INGR = [];        // tous les ingrédients (is_base inclus)
+let curCat = null;
+// Mode "ajout à une commande existante" : /web/pos.html?add=<orderId>
+const ADD_TO = new URLSearchParams(location.search).get('add');
+const state = {
+  order_type: null, seating: null, table: 1, covers: 1,
+  customer_name: '', customer_phone: '', pickup_time: '',
+  cart: [],
+};
+
+// ---------- Chargement ----------
+async function load() {
+  try {
+    const [rc, ri] = await Promise.all([SG.api('/categories/'), SG.api('/ingredients/')]);
+    CATS = await rc.json();
+    INGR = await ri.json();
+    renderCats();
+    if (ADD_TO) {
+      // Pas de type de commande à choisir : on ajoute un bon à la commande existante.
+      const oi = document.getElementById('ordinfo');
+      oi.onclick = null;
+      document.getElementById('ord-mode').textContent = 'Ajout';
+      document.getElementById('ord-detail').textContent = `Nouveaux articles pour la commande #${ADD_TO}`;
+      oi.querySelector('.edit').classList.add('hidden');
+      const bb = document.getElementById('btn-back');
+      if (bb) bb.setAttribute('href', '/web/history.html');
+    } else if (!state.order_type) {
+      openTypeSheet();
+    }
+  } catch (e) {
+    document.getElementById('items').innerHTML = '<div class="empty">Erreur de chargement.</div>';
+  }
+}
+
+function renderCats() {
+  const el = document.getElementById('cats');
+  el.innerHTML = CATS.map((c, i) =>
+    `<button class="cat-tab ${curCat === c.name ? 'on' : ''}" onclick="selCat('${SG.esc(c.name)}')">${SG.esc(c.name)}</button>`
+  ).join('');
+}
+function selCat(name) { curCat = name; renderCats(); renderItems(); }
+
+function renderItems() {
+  const cat = CATS.find(c => c.name === curCat);
+  const box = document.getElementById('items');
+  if (!cat) { box.innerHTML = '<div class="empty">Choisis une catégorie.</div>'; return; }
+  const items = (cat.items || []).filter(it => !it.deleted_at);
+  if (!items.length) { box.innerHTML = '<div class="empty">Aucun article.</div>'; return; }
+  box.innerHTML = items.map(it => {
+    const out = it.is_in_stock === false;
+    return `<div class="item ${out ? 'out' : ''}" onclick='tapItem(${it.id})'>
+      <span class="nm">${SG.esc(it.name)}${out ? ' <span class="tag">· rupture</span>' : ''}</span>
+      <span class="pr">${SG.fmtPrice(it.price)}</span>
+    </div>`;
+  }).join('');
+}
+
+function findItem(id) {
+  for (const c of CATS) { const it = (c.items || []).find(x => x.id === id); if (it) return { it, cat: c.name }; }
+  return null;
+}
+
+// ---------- Tap article ----------
+function tapItem(id) {
+  const f = findItem(id); if (!f) return;
+  const it = f.it;
+  if (it.is_in_stock === false) return;
+  const opts = (it.options || []).filter(o => o.stock_quantity === null || o.stock_quantity > 0);
+  if (opts.length) return openOptionSheet(it, opts);
+  if ((it.ingredients || []).length) return openModSheet(it, f.cat);
+  addToCart(it, 1, null, null, null);
+  flash();
+}
+
+// ---------- Sheet: options ----------
+function openOptionSheet(it, opts) {
+  const q = {};
+  opts.forEach(o => q[o.id] = 0);
+  setSheet(`Options — ${SG.esc(it.name)}`,
+    opts.map(o => `<div class="chk-row">
+      <span class="grow">${SG.esc(o.name)}</span>
+      ${stepperHtml('opt_' + o.id, 0)}
+    </div>`).join(''),
+    `<button class="btn btn-green" onclick="confirmOptions(${it.id})">Ajouter au panier</button>`);
+  window._optCtx = { it, opts };
+}
+function confirmOptions(id) {
+  const { it, opts } = window._optCtx;
+  const selected = []; let total = 0;
+  opts.forEach(o => {
+    const v = getStep('opt_' + o.id);
+    if (v > 0) { selected.push({ item_option_id: o.id, name: o.name, quantity: v }); total += v; }
+  });
+  if (!total) { return; }
+  addToCart(it, total, selected, null, null);
+  closeSheet(); flash();
+}
+
+// ---------- Sheet: modifications (retraits / suppléments / base) ----------
+function openModSheet(it, catName) {
+  const isPizza = /pizza/i.test(catName || '');
+  const itemIngr = it.ingredients || [];
+  const itemIds = new Set(itemIngr.map(i => i.id));
+  const bases = INGR.filter(i => i.is_base);
+  const baseInItem = itemIngr.filter(i => i.is_base);
+  const showBase = isPizza && baseInItem.length > 0;
+  const curBaseId = showBase ? baseInItem[0].id : null;
+
+  const nonBase = itemIngr.filter(i => !(isPizza && i.is_base));
+  const supps = INGR.filter(i => !itemIds.has(i.id) && !(isPizza && i.is_base));
+
+  let html = '';
+  if (showBase) {
+    html += `<div class="sheet-section">Base</div><div>` +
+      bases.map(b => `<button class="chip ${b.id === curBaseId ? 'on' : ''}" data-base="${b.id}" onclick="pickBase(${b.id})">${SG.esc(b.name)}</button>`).join('') + `</div>`;
+  }
+  if (nonBase.length) {
+    html += `<div class="sheet-section">Retraits (décoche pour retirer)</div>`;
+    html += nonBase.map(i => `<label class="chk-row"><input type="checkbox" data-keep="${i.id}" checked><span>${SG.esc(i.name)}</span></label>`).join('');
+  }
+  if (supps.length) {
+    html += `<div class="sheet-section">Suppléments +1€</div>`;
+    html += `<input id="supp-search" placeholder="Rechercher…" oninput="filterSupp()" style="margin-bottom:8px">`;
+    html += `<div id="supp-list">` + supps.map(i =>
+      `<label class="chk-row supp-item" data-name="${SG.esc(i.name).toLowerCase()}"><input type="checkbox" data-add="${i.id}"><span>${SG.esc(i.name)} <span class="muted">+1€</span></span></label>`
+    ).join('') + `</div>`;
+  }
+  html += `<div class="sheet-section">Quantité</div>${stepperHtml('mod_qty', 1, 1)}`;
+  html += `<div class="sheet-section">Commentaire</div><input id="mod-cmt" placeholder="ex : bien cuite">`;
+
+  setSheet(`${SG.esc(it.name)}`, html,
+    `<button class="btn btn-green" onclick="confirmMods(${it.id})">Ajouter au panier</button>`);
+  window._modCtx = { it, curBaseId, pickedBase: curBaseId, bases };
+}
+function pickBase(id) {
+  window._modCtx.pickedBase = id;
+  document.querySelectorAll('[data-base]').forEach(b => b.classList.toggle('on', Number(b.dataset.base) === id));
+}
+function filterSupp() {
+  const q = (document.getElementById('supp-search').value || '').toLowerCase();
+  document.querySelectorAll('.supp-item').forEach(el => {
+    el.style.display = el.dataset.name.includes(q) ? '' : 'none';
+  });
+}
+function confirmMods(id) {
+  const ctx = window._modCtx; const it = ctx.it;
+  const mods = [];
+  // base
+  if (ctx.curBaseId != null && ctx.pickedBase !== ctx.curBaseId) {
+    const b = ctx.bases.find(x => x.id === ctx.pickedBase);
+    if (b) mods.push({ ingredient_id: b.id, modification_type: 'base_change', ingredient_name: b.name });
+  }
+  // retraits
+  document.querySelectorAll('[data-keep]').forEach(cb => {
+    if (!cb.checked) {
+      const ing = (it.ingredients || []).find(i => i.id === Number(cb.dataset.keep));
+      mods.push({ ingredient_id: Number(cb.dataset.keep), modification_type: 'remove', ingredient_name: ing ? ing.name : '' });
+    }
+  });
+  // suppléments
+  document.querySelectorAll('[data-add]').forEach(cb => {
+    if (cb.checked) {
+      const ing = INGR.find(i => i.id === Number(cb.dataset.add));
+      mods.push({ ingredient_id: Number(cb.dataset.add), modification_type: 'add', ingredient_name: ing ? ing.name : '' });
+    }
+  });
+  const qty = getStep('mod_qty') || 1;
+  const cmt = (document.getElementById('mod-cmt').value || '').trim() || null;
+  addToCart(it, qty, null, mods.length ? mods : null, cmt);
+  closeSheet(); flash();
+}
+
+// ---------- Panier ----------
+function optKey(o) { return o ? o.map(x => x.item_option_id + ':' + x.quantity).sort().join(',') : ''; }
+function addToCart(it, qty, options, modifications, comment) {
+  // cumul si identique (mêmes options, pas de modif ni commentaire)
+  if (!modifications && !comment) {
+    const k = it.id + '|' + optKey(options);
+    const ex = state.cart.find(l => !l.modifications && !l.comment && (l.item.id + '|' + optKey(l.options)) === k);
+    if (ex) { ex.qty += qty; return renderCartBar(); }
+  }
+  state.cart.push({ item: it, qty, options: options || null, modifications: modifications || null, comment: comment || null });
+  renderCartBar();
+}
+function lineUnit(l) {
+  const supp = (l.modifications || []).filter(m => m.modification_type === 'add').length;
+  return Number(l.item.price) + supp;
+}
+function cartTotal() { return state.cart.reduce((s, l) => s + lineUnit(l) * l.qty, 0); }
+function cartCount() { return state.cart.reduce((s, l) => s + l.qty, 0); }
+function renderCartBar() {
+  const bar = document.getElementById('cartbar');
+  if (!state.cart.length) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  document.getElementById('cart-count').textContent = cartCount();
+  document.getElementById('cart-total').textContent = SG.fmtPrice(cartTotal());
+}
+function modsSummary(mods) {
+  if (!mods || !mods.length) return '';
+  const base = mods.filter(m => m.modification_type === 'base_change').map(m => 'BASE ' + m.ingredient_name);
+  const add = mods.filter(m => m.modification_type === 'add').map(m => m.ingredient_name);
+  const rem = mods.filter(m => m.modification_type === 'remove').map(m => m.ingredient_name);
+  const parts = [...base];
+  if (add.length) parts.push('SUPP [' + add.join(', ') + ']');
+  if (rem.length) parts.push('SANS [' + rem.join(', ') + ']');
+  return parts.join(', ');
+}
+function optSummary(opts) { return opts && opts.length ? '(' + opts.map(o => o.name + ' ×' + o.quantity).join(', ') + ')' : ''; }
+
+function openCartSheet() {
+  if (!state.cart.length) return;
+  const body = state.cart.map((l, i) => {
+    const os = optSummary(l.options); const ms = modsSummary(l.modifications);
+    return `<div class="cart-line">
+      <div class="top">
+        <div class="grow">
+          <div class="nm">${SG.esc(l.item.name)} ${os ? '<span class="muted">' + SG.esc(os) + '</span>' : ''}</div>
+          ${ms ? `<div class="mods">${SG.esc(ms)}</div>` : ''}
+          ${l.comment ? `<div class="cmt">${SG.esc(l.comment)}</div>` : ''}
+        </div>
+        <div class="pr">${SG.fmtPrice(lineUnit(l) * l.qty)}</div>
+      </div>
+      <div class="row2">
+        ${stepperHtml('cart_' + i, l.qty, 1, 'cartQty(' + i + ')')}
+        <button class="rm" onclick="rmLine(${i})">🗑</button>
+      </div>
+    </div>`;
+  }).join('') + `<div class="total-row">Total <span class="g">${SG.fmtPrice(cartTotal())}</span></div>`;
+
+  const sendLabel = ADD_TO ? `Ajouter à la commande #${ADD_TO}` : 'Envoyer en cuisine';
+  setSheet('Panier', body, `<button class="btn btn-green" id="btn-send" onclick="sendKitchen()">${sendLabel}</button>`);
+}
+function cartQty(i) { state.cart[i].qty = getStep('cart_' + i); renderCartBar(); refreshCartTotals(); }
+function rmLine(i) { state.cart.splice(i, 1); renderCartBar(); if (state.cart.length) openCartSheet(); else closeSheet(); }
+function refreshCartTotals() {
+  const t = document.querySelector('.total-row .g'); if (t) t.textContent = SG.fmtPrice(cartTotal());
+  state.cart.forEach((l, i) => {
+    const line = document.querySelectorAll('.cart-line')[i];
+    if (line) line.querySelector('.pr').textContent = SG.fmtPrice(lineUnit(l) * l.qty);
+  });
+}
+
+// ---------- Envoi cuisine / ajout de bon ----------
+async function sendKitchen() {
+  if (!state.cart.length) return;
+  const btn = document.getElementById('btn-send'); btn.disabled = true; btn.textContent = 'Envoi…';
+  const items = state.cart.map(l => ({
+    item_id: l.item.id,
+    quantity: l.qty,
+    comment: l.comment,
+    selected_options: l.options ? l.options.map(o => ({ item_option_id: o.item_option_id, quantity: o.quantity })) : null,
+    modifications: l.modifications ? l.modifications.map(m => ({ ingredient_id: m.ingredient_id, modification_type: m.modification_type })) : null,
+  }));
+  try {
+    if (ADD_TO) {
+      // Ajout d'un nouveau bon à une commande existante
+      const res = await SG.api('/orders/' + ADD_TO + '/items', { method: 'POST', body: JSON.stringify({ items }) });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Erreur'); }
+      state.cart = []; renderCartBar(); closeSheet();
+      toast(`Bon ajouté à la commande #${ADD_TO} ✓`);
+      setTimeout(() => { location.href = '/web/history.html'; }, 900);
+      return;
+    }
+    const payload = {
+      order_type: state.order_type,
+      table_number: state.order_type === 'eat_in' ? state.table : null,
+      covers: state.order_type === 'eat_in' ? state.covers : null,
+      seating_location: state.order_type === 'eat_in' ? state.seating : null,
+      pickup_time: state.order_type === 'take_away' ? (state.pickup_time || null) : null,
+      customer_name: state.order_type === 'take_away' ? (state.customer_name || null) : null,
+      customer_phone: state.order_type === 'take_away' ? (state.customer_phone || null) : null,
+      items,
+    };
+    const res = await SG.api('/orders/', { method: 'POST', body: JSON.stringify(payload) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Erreur'); }
+    const order = await res.json();
+    state.cart = []; renderCartBar(); closeSheet();
+    toast(`Commande #${order.id} envoyée en cuisine ✓`);
+    openTypeSheet(); // nouvelle commande
+  } catch (e) {
+    btn.disabled = false; btn.textContent = ADD_TO ? `Ajouter à la commande #${ADD_TO}` : 'Envoyer en cuisine';
+    alert('Échec de l’envoi : ' + e.message);
+  }
+}
+
+// ---------- Sheet: type de commande ----------
+function openTypeSheet() {
+  const t = state.order_type || 'eat_in';
+  const eatin = `
+    <div class="field"><label>Table</label>${stepperHtml('ts_table', state.table, 1)}</div>
+    <div class="field"><label>Couverts</label>${stepperHtml('ts_covers', state.covers, 1)}</div>
+    <div class="field"><label>Emplacement</label>
+      <div>
+        <button class="chip ${state.seating !== 'outdoor' ? 'on' : ''}" data-seat="indoor" onclick="pickSeat('indoor')">Salle</button>
+        <button class="chip ${state.seating === 'outdoor' ? 'on' : ''}" data-seat="outdoor" onclick="pickSeat('outdoor')">Terrasse</button>
+      </div>
+    </div>`;
+  const takeaway = `
+    <div class="field"><label>Nom du client</label><input id="ts_name" value="${SG.esc(state.customer_name)}" placeholder="Nom"></div>
+    <div class="field"><label>Téléphone</label><input id="ts_phone" type="tel" value="${SG.esc(state.customer_phone)}" placeholder="Téléphone"></div>
+    <div class="field"><label>Heure de retrait</label><input id="ts_pickup" type="time" value="${SG.esc(state.pickup_time)}"></div>`;
+  const body = `
+    <div class="type-choice">
+      <button class="btn ${t === 'eat_in' ? 'btn-gold' : 'btn-ghost'}" id="tc-eat" onclick="setType('eat_in')">Sur place</button>
+      <button class="btn ${t === 'take_away' ? 'btn-gold' : 'btn-ghost'}" id="tc-take" onclick="setType('take_away')">À emporter</button>
+    </div>
+    <div id="type-fields">${t === 'eat_in' ? eatin : takeaway}</div>`;
+  setSheet('Type de commande', body, `<button class="btn btn-wine" onclick="confirmType()">Valider</button>`, false);
+  window._tsType = t;
+}
+function setType(t) {
+  window._tsType = t;
+  document.getElementById('tc-eat').className = 'btn ' + (t === 'eat_in' ? 'btn-gold' : 'btn-ghost');
+  document.getElementById('tc-take').className = 'btn ' + (t === 'take_away' ? 'btn-gold' : 'btn-ghost');
+  // re-render champs
+  state.order_type = t;
+  const stash = state.order_type;
+  openTypeSheet(); window._tsType = t;
+}
+function pickSeat(s) {
+  state.seating = s;
+  document.querySelectorAll('[data-seat]').forEach(b => b.classList.toggle('on', b.dataset.seat === s));
+}
+function confirmType() {
+  const t = window._tsType || 'eat_in';
+  state.order_type = t;
+  if (t === 'eat_in') {
+    state.table = getStep('ts_table') || 1;
+    state.covers = getStep('ts_covers') || 1;
+    if (!state.seating) state.seating = 'indoor';
+  } else {
+    state.customer_name = (document.getElementById('ts_name').value || '').trim();
+    state.customer_phone = (document.getElementById('ts_phone').value || '').trim();
+    state.pickup_time = document.getElementById('ts_pickup').value || '';
+  }
+  renderOrdInfo(); closeSheet();
+}
+function renderOrdInfo() {
+  document.getElementById('ord-mode').textContent = ORDER_TYPE_LABELS[state.order_type] || '—';
+  let d = '';
+  if (state.order_type === 'eat_in') d = `Table ${state.table} · ${state.covers} couv. · ${SEATING_LABELS[state.seating] || 'Salle'}`;
+  else if (state.order_type === 'take_away') d = [state.customer_name, state.pickup_time && ('retrait ' + state.pickup_time)].filter(Boolean).join(' · ') || 'À emporter';
+  document.getElementById('ord-detail').textContent = d;
+}
+
+// ---------- Steppers ----------
+function stepperHtml(id, val, min, onch) {
+  min = min || 0;
+  return `<span class="stepper" data-id="${id}" data-min="${min}">
+    <button onclick="step('${id}',-1${onch ? ",'" + onch + "'" : ''})">−</button>
+    <span class="val" id="${id}">${val}</span>
+    <button onclick="step('${id}',1${onch ? ",'" + onch + "'" : ''})">+</button>
+  </span>`;
+}
+function getStep(id) { const el = document.getElementById(id); return el ? parseInt(el.textContent) || 0 : 0; }
+function step(id, d, cb) {
+  const el = document.getElementById(id); if (!el) return;
+  const wrap = el.closest('.stepper'); const min = parseInt(wrap.dataset.min || '0');
+  let v = (parseInt(el.textContent) || 0) + d; if (v < min) v = min; el.textContent = v;
+  if (cb && window[cb.replace(/\(.*/, '')]) { try { eval(cb); } catch (e) {} }
+}
+
+// ---------- Sheet générique ----------
+function setSheet(title, body, foot, closable = true) {
+  document.getElementById('sheet-title').textContent = title;
+  document.getElementById('sheet-body').innerHTML = body;
+  document.getElementById('sheet-foot').innerHTML = foot || '';
+  document.getElementById('backdrop').classList.add('open');
+  const x = document.querySelector('#sheet .x');
+  x.style.visibility = closable ? 'visible' : 'hidden';
+}
+function closeSheet() { document.getElementById('backdrop').classList.remove('open'); }
+document.getElementById('backdrop').addEventListener('click', e => { if (e.target.id === 'backdrop' && document.querySelector('#sheet .x').style.visibility !== 'hidden') closeSheet(); });
+
+function flash() { const b = document.getElementById('cartbar'); b.style.transition = 'none'; b.style.filter = 'brightness(1.3)'; setTimeout(() => { b.style.transition = 'filter .3s'; b.style.filter = 'none'; }, 60); }
+function toast(txt) {
+  const t = document.createElement('div');
+  t.textContent = txt;
+  t.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);background:var(--green);color:#fff;padding:12px 18px;border-radius:10px;z-index:100;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.4)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2600);
+}
+
+load();
+</script>
+</body>
+</html>

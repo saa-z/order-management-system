@@ -3,15 +3,19 @@
 ## Sommaire
 
 1. [Installation sur le PC principal](#1-installation-sur-le-pc-principal)
-2. [Lancement du système](#2-lancement-du-système)
-3. [L'application PC (central)](#3-lapplication-pc-central)
-4. [L'accès depuis téléphone / tablette (web)](#4-laccès-depuis-téléphone--tablette-web)
-5. [Prendre une commande](#5-prendre-une-commande)
-6. [Historique des commandes](#6-historique-des-commandes)
-7. [Gestion des stocks](#7-gestion-des-stocks)
-8. [Gestion des articles](#8-gestion-des-articles)
-9. [Gestion des accès (utilisateurs)](#9-gestion-des-accès-utilisateurs)
-10. [Impression des tickets](#10-impression-des-tickets)
+2. [Configuration de l'imprimante thermique](#2-configuration-de-limprimante-thermique)
+3. [Raccourci bureau et lancement rapide](#3-raccourci-bureau-et-lancement-rapide)
+4. [Lancement du système](#4-lancement-du-système)
+5. [L'application PC (central)](#5-lapplication-pc-central)
+6. [L'accès depuis téléphone / tablette (web)](#6-laccès-depuis-téléphone--tablette-web)
+7. [Prendre une commande](#7-prendre-une-commande)
+8. [Historique des commandes](#8-historique-des-commandes)
+9. [Gestion des stocks](#9-gestion-des-stocks)
+10. [Gestion des articles](#10-gestion-des-articles)
+11. [Gestion des accès (utilisateurs)](#11-gestion-des-accès-utilisateurs)
+12. [Impression des tickets](#12-impression-des-tickets)
+13. [Tiroir-caisse](#13-tiroir-caisse)
+14. [Transfert sur un autre PC](#14-transfert-sur-un-autre-pc)
 
 ---
 
@@ -20,7 +24,7 @@
 ### Prérequis
 
 - **Python 3.11+** installé sur la machine
-- Une **imprimante** configurée comme imprimante par défaut (pour les tickets)
+- Une **imprimante thermique SAGA SGPR-200II** connectée en USB (voir section 2)
 - Le PC principal et les appareils mobiles doivent être sur le **même réseau Wi-Fi**
 
 ### Étapes d'installation
@@ -56,15 +60,75 @@
 
 ---
 
-## 2. Lancement du système
+## 2. Configuration de l'imprimante thermique
+
+L'imprimante **SAGA SGPR-200II** est utilisée pour les tickets de cuisine, les reçus clients et l'ouverture du tiroir-caisse. Elle doit être connectée en **USB** au PC principal.
+
+### Étape 1 — Brancher l'imprimante
+
+Connecter l'imprimante au PC via un câble USB. Windows devrait la détecter automatiquement dans les périphériques.
+
+### Étape 2 — Installer le pilote Generic / Text Only
+
+L'imprimante doit être configurée avec le pilote **Generic / Text Only** pour permettre l'envoi de commandes ESC/POS brutes :
+
+1. Ouvrir **Paramètres** > **Bluetooth et appareils** > **Imprimantes et scanners**.
+2. Cliquer sur **Ajouter une imprimante** > **L'imprimante souhaitée n'est pas répertoriée**.
+3. Choisir **Ajouter une imprimante locale** avec le port **USB001** (ou le port USB détecté).
+4. Dans la liste des fabricants, choisir **Generic** puis **Generic / Text Only**.
+5. Nommer l'imprimante **`Saga`** (ce nom exact est utilisé par le logiciel).
+6. Terminer l'installation.
+
+### Étape 3 — Vérifier
+
+L'imprimante doit apparaître sous le nom **Saga** dans la liste des imprimantes Windows.
+
+> **Important** : le nom de l'imprimante dans Windows doit être exactement **`Saga`**. Si le nom est différent, les impressions ne fonctionneront pas.
+
+### Test rapide
+
+Pour vérifier que l'imprimante fonctionne, lancer dans un terminal :
+
+```bash
+cd order-management-system
+.venv\Scripts\activate
+python -c "from frontend.cash_drawer import send_raw; ok, msg = send_raw(b'\x1B\x40Test impression\n\n\n\x1D\x56\x00'); print('OK' if ok else msg)"
+```
+
+Si le ticket s'imprime avec « Test impression », tout est bon.
+
+---
+
+## 3. Raccourci bureau et lancement rapide
+
+### Créer le raccourci (à faire une seule fois)
+
+Double-cliquer sur le fichier **`installer_raccourci.bat`** à la racine du dossier projet. Cela crée un raccourci **« San Giorgio - OMS »** sur le bureau avec le logo du restaurant.
+
+### Lancement quotidien
+
+Double-cliquer sur le raccourci **San Giorgio - OMS** sur le bureau. Le script :
+
+1. Lance le serveur en arrière-plan (fenêtre minimisée)
+2. Attend 3 secondes que le serveur démarre
+3. Ouvre l'application de bureau
+4. Quand l'application est fermée, le serveur s'arrête automatiquement
+
+C'est la méthode recommandée pour le quotidien — un seul clic pour tout lancer.
+
+---
+
+## 4. Lancement du système
+
+### Méthode simple (recommandée)
+
+Utiliser le raccourci bureau (voir section 3).
+
+### Méthode manuelle (avancée)
 
 Le système se compose de **deux parties** à lancer en parallèle.
 
 > **Les données ne sont jamais perdues quand le PC s'éteint.** Tout est stocké dans un fichier `sangiorgio.db` sur le disque. Le relancement du serveur reprend exactement là où on s'est arrêté (commandes, articles, utilisateurs, stocks — tout est conservé).
-
-### Lancement quotidien (après l'installation)
-
-Chaque jour (ou après un redémarrage du PC), il suffit de :
 
 **Terminal 1 — Serveur :**
 
@@ -82,29 +146,22 @@ cd order-management-system/frontend
 python app.py
 ```
 
-C'est tout. La base de données existante est réutilisée automatiquement.
-
 > `--host 0.0.0.0` rend le serveur accessible depuis tout le réseau local (téléphones, tablettes).
 
 > **Ne jamais relancer `python init_db.py`** sauf si vous voulez tout remettre à zéro (toutes les commandes, articles et utilisateurs seront supprimés et recréés depuis le menu de base).
-
-### À propos de l'application de bureau
-
-L'application se connecte automatiquement au serveur local (`127.0.0.1:8000`) — **aucune connexion n'est requise** sur le PC principal (confiance locale).
-
-Elle démarre aussi un **processus d'impression en arrière-plan** qui surveille les tickets à imprimer (commandes passées depuis les téléphones).
 
 ### Résumé
 
 | Commande | Quand l'utiliser | Effet sur les données |
 |----------|-----------------|----------------------|
-| `uvicorn main:app ...` | Chaque lancement | Aucun — reprend la base existante |
-| `python app.py` | Chaque lancement | Aucun — interface seulement |
+| Raccourci bureau | Chaque jour | Aucun — lance serveur + app |
+| `uvicorn main:app ...` | Lancement manuel | Aucun — reprend la base existante |
+| `python app.py` | Lancement manuel | Aucun — interface seulement |
 | `python init_db.py` | Installation initiale uniquement | **Supprime tout** et recrée depuis zéro |
 
 ---
 
-## 3. L'application PC (central)
+## 5. L'application PC (central)
 
 Au lancement, un écran d'accueil « SAN GIORGIO » s'affiche brièvement, puis le **menu principal** apparaît avec les options suivantes :
 
@@ -115,10 +172,11 @@ Au lancement, un écran d'accueil « SAN GIORGIO » s'affiche brièvement, puis 
 | **Gestion des stocks**     | Modifier les quantités en stock des articles et options |
 | **Gestion des articles**   | Ajouter/modifier/supprimer des catégories, articles, ingrédients |
 | **Gestion des accès**      | Créer et gérer les comptes utilisateurs (serveurs, admins) |
+| **Ouvrir la caisse**       | Envoyer la commande d'ouverture au tiroir-caisse |
 
 ---
 
-## 4. L'accès depuis téléphone / tablette (web)
+## 6. L'accès depuis téléphone / tablette (web)
 
 Les serveurs peuvent prendre des commandes depuis leur téléphone ou une tablette, à condition d'être connectés au même réseau Wi-Fi que le PC principal.
 
@@ -150,7 +208,7 @@ Après connexion, deux options sont disponibles :
 
 ---
 
-## 5. Prendre une commande
+## 7. Prendre une commande
 
 ### Étape 1 — Type de commande
 
@@ -188,11 +246,18 @@ Cliquer sur l'icône **bulle** à côté d'un article dans le panier pour ajoute
 
 1. Vérifier le panier et le total.
 2. Cliquer sur **Envoyer en cuisine**.
-3. Un bon de cuisine est automatiquement imprimé.
+3. Un bon de cuisine est automatiquement imprimé sur l'imprimante SAGA (sans popup).
+
+### Étape 6 — Facturation
+
+Après l'envoi en cuisine, le bouton **Facturer** apparaît :
+
+1. Cliquer sur **Facturer** pour marquer la commande comme payée.
+2. Le reçu client est automatiquement imprimé.
 
 ---
 
-## 6. Historique des commandes
+## 8. Historique des commandes
 
 ### Consulter les commandes
 
@@ -221,7 +286,7 @@ Double-cliquer sur une commande (PC) ou la toucher (web) pour ouvrir le détail.
 
 ---
 
-## 7. Gestion des stocks
+## 9. Gestion des stocks
 
 Accessible depuis le menu principal (PC uniquement).
 
@@ -234,7 +299,7 @@ Quand le stock d'un article tombe à 0, il apparaît comme indisponible dans le 
 
 ---
 
-## 8. Gestion des articles
+## 10. Gestion des articles
 
 Accessible depuis le menu principal (PC uniquement).
 
@@ -263,7 +328,7 @@ Pour associer des ingrédients à un article : modifier l'article et utiliser le
 
 ---
 
-## 9. Gestion des accès (utilisateurs)
+## 11. Gestion des accès (utilisateurs)
 
 Accessible depuis le menu principal (PC uniquement). **Réservé aux administrateurs.**
 
@@ -286,10 +351,10 @@ Accessible depuis le menu principal (PC uniquement). **Réservé aux administrat
 
 Le nouvel utilisateur peut maintenant se connecter depuis un téléphone/tablette avec ces identifiants.
 
-### Modifier un utilisateur
+### Modifier un mot de passe
 
-- Cliquer sur un utilisateur pour modifier son nom, mot de passe ou rôle.
-- L'icône **oeil** sur chaque ligne permet d'afficher/masquer le mot de passe.
+- Cliquer sur l'icône **crayon** à côté du mot de passe pour le modifier directement.
+- L'icône **oeil** permet d'afficher/masquer le mot de passe en clair.
 
 ### Révoquer / Réactiver
 
@@ -309,9 +374,9 @@ Le nouvel utilisateur peut maintenant se connecter depuis un téléphone/tablett
 
 ---
 
-## 10. Impression des tickets
+## 12. Impression des tickets
 
-L'imprimante par défaut du PC principal est utilisée pour tous les tickets. Aucune configuration n'est nécessaire dans l'application.
+L'impression se fait directement sur l'imprimante thermique **SAGA** en ESC/POS natif, sans popup ni dialogue d'impression. Tout est automatique.
 
 ### Bon de cuisine
 
@@ -319,13 +384,30 @@ Imprimé automatiquement quand :
 - Une commande est envoyée en cuisine
 - Des articles sont ajoutés à une commande existante
 
-Contenu : date, table, couverts, serveur, articles groupés par catégorie (plats en premier, boissons/desserts en bas).
+Contenu :
+- En-tête « BON DE CUISINE » en gros caractères
+- Numéro de commande, type (sur place / à emporter), table, couverts, serveur
+- Articles groupés par catégorie (plats en premier, boissons/desserts en bas)
+- Texte agrandi (double hauteur) pour une lecture facile en cuisine
+- Marges haut et bas pour faciliter l'accrochage
+
+> Pas de prix sur le bon de cuisine — uniquement les noms et quantités.
 
 ### Ticket client (reçu)
 
-Imprimé via le bouton **Imprimer reçu** dans le détail d'une commande.
+Imprimé via le bouton **Facturer** (POS) ou **Imprimer reçu** (historique).
 
-Contenu : « San Giorgio — Saint Georges de Mons », date, articles avec prix, total, total par personne, message de remerciement.
+Contenu :
+- En-tête : **SAN GIORGIO**, 10 Avenue de la Libération, 63780 Saint Georges de Mons
+- SIRET : 95213378300029
+- Date, heure, table, serveur
+- Articles détaillés avec prix unitaire et total par ligne
+- Total HT
+- TVA 5,5%
+- **TOTAL TTC** en gros caractères
+- Total par personne (si couverts renseignés)
+- Détail TVA (HT / TVA / TTC)
+- Message « Merci et a bientot ! »
 
 ### Bon d'annulation
 
@@ -334,3 +416,54 @@ Imprimé automatiquement quand une commande est annulée (pour prévenir la cuis
 ### Depuis un téléphone
 
 Toutes les actions d'impression déclenchées depuis un téléphone sont **mises en file d'attente** et imprimées automatiquement par le PC principal (délai de quelques secondes).
+
+---
+
+## 13. Tiroir-caisse
+
+Le tiroir-caisse est branché sur l'imprimante SAGA via le port **RJ11** (connecteur téléphone à l'arrière de l'imprimante).
+
+### Ouvrir la caisse
+
+Depuis le menu principal de l'application PC, cliquer sur le bouton **Ouvrir la caisse**. La commande ESC/POS d'ouverture est envoyée à l'imprimante qui déclenche l'ouverture du tiroir.
+
+> Le tiroir-caisse ne fonctionne que depuis le PC principal (pas depuis les téléphones).
+
+---
+
+## 14. Transfert sur un autre PC
+
+Pour installer le système sur un nouveau PC (ex : le PC central du restaurant) :
+
+### Étape 1 — Copier le dossier
+
+Copier l'intégralité du dossier `san-gorgio-oms` sur le nouveau PC (clé USB, disque réseau, etc.).
+
+### Étape 2 — Installer Python
+
+Installer **Python 3.11+** sur le nouveau PC si ce n'est pas déjà fait.
+
+### Étape 3 — Recréer l'environnement virtuel
+
+Les environnements virtuels ne sont pas portables. Sur le nouveau PC :
+
+```bash
+cd order-management-system
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Étape 4 — Configurer l'imprimante
+
+Suivre les instructions de la [section 2](#2-configuration-de-limprimante-thermique) pour installer l'imprimante SAGA avec le pilote Generic / Text Only sous le nom **Saga**.
+
+### Étape 5 — Créer le raccourci bureau
+
+Double-cliquer sur **`installer_raccourci.bat`** à la racine du dossier. Le raccourci « San Giorgio - OMS » avec le logo apparaît sur le bureau.
+
+### Étape 6 — Lancer
+
+Double-cliquer sur le raccourci. C'est prêt.
+
+> **Note** : le fichier `sangiorgio.db` contient toutes les données. Si vous copiez ce fichier depuis l'ancien PC, vous récupérez toutes les commandes, articles et utilisateurs. Si vous ne le copiez pas, lancez `python init_db.py` pour repartir de zéro.

@@ -184,7 +184,7 @@ def build_kitchen_ticket(order: dict, batch: int) -> bytes:
 # TICKET CLIENT (REÇU / FACTURATION)
 # ══════════════════════════════════════════
 
-TVA_RATE = 0.20
+TVA_RATE = 0.055
 
 def _fmt_price(amount: float) -> str:
     """Format prix avec virgule (style français)."""
@@ -269,7 +269,12 @@ def build_receipt_ticket(order: dict) -> bytes:
 
     out += _line("-")
 
-    # ── Total TTC ──
+    # ── Totaux ──
+    ht = total_ttc / (1 + TVA_RATE)
+    tva = total_ttc - ht
+
+    out += _price_line("Total HT", ht)
+    out += _price_line(f"TVA {TVA_RATE*100:.1f}%".replace(".", ","), tva)
     out += BOLD_ON + DOUBLE_H
     total_label = "TOTAL TTC"
     total_val = f"{_fmt_price(total_ttc)} EUR"
@@ -286,9 +291,6 @@ def build_receipt_ticket(order: dict) -> bytes:
     out += _line("=")
 
     # ── Détail TVA ──
-    ht = total_ttc / (1 + TVA_RATE)
-    tva = total_ttc - ht
-
     out += BOLD_ON
     tva_hdr = "DETAIL TVA"
     tva_cols = "HT      TVA      TTC"
