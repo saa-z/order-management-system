@@ -4,11 +4,11 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QLineEdit, QDateEdit, QDoubleSpinBox, QComboBox,
                                QCompleter, QScrollArea, QCheckBox)
 from PySide6.QtCore import Qt, QDate, QStringListModel
-from PySide6.QtGui import QColor, QTextDocument
-from PySide6.QtPrintSupport import QPrinter
+from PySide6.QtGui import QColor
 
 from views.option_picker_dialog import OptionPickerDialog
-from print_worker import build_kitchen_html, build_receipt_html
+from cash_drawer import send_raw
+from escpos_tickets import build_kitchen_ticket, build_receipt_ticket
 
 
 class _PassThroughWheelTable(QTableWidget):
@@ -523,16 +523,15 @@ class OrderDetailDialog(QDialog):
             QMessageBox.warning(self, "Aucune sélection", "Sélectionnez au moins un envoi.")
             return
         for bn in selected:
-            self._do_print(build_kitchen_html(self._order, bn))
-
-    def _do_print(self, html: str):
-        printer = QPrinter(QPrinter.HighResolution)
-        doc = QTextDocument()
-        doc.setHtml(html)
-        doc.print_(printer)
+            ok, msg = send_raw(build_kitchen_ticket(self._order, bn))
+            if not ok:
+                QMessageBox.warning(self, "Impression", msg)
+                return
 
     def _print_all(self):
-        self._do_print(build_receipt_html(self._order))
+        ok, msg = send_raw(build_receipt_ticket(self._order))
+        if not ok:
+            QMessageBox.warning(self, "Impression", msg)
 
     def _mark_paid(self):
         reply = QMessageBox.question(

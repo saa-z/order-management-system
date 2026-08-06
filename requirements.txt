@@ -10,7 +10,9 @@ httpx
 
 # Graphical Interface
 PySide6
+qtawesome
 
 # Hardware & Tests
 python-escpos
+pywin32
 pytest
