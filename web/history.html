@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1A1714">
+<title>San Giorgio — Historique</title>
+<link rel="stylesheet" href="/web/app.css">
+<style>
+  .filters { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px; }
+  .filters::-webkit-scrollbar { display: none; }
+  .fchip { flex: 0 0 auto; background: var(--bg2); border: 1px solid var(--line); color: var(--text2); border-radius: 20px; padding: 8px 14px; font-size: 13px; white-space: nowrap; }
+  .fchip.on { background: var(--gold2); color: var(--bg); border-color: var(--gold2); font-weight: 700; }
+
+  .list { flex: 1; overflow-y: auto; padding: 4px 12px 24px; }
+  .ord {
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+  }
+  .ord:active { border-color: var(--gold2); }
+  .ord .id { font-weight: 800; color: var(--gold); font-size: 15px; }
+  .ord .mid { flex: 1; }
+  .ord .meta { font-size: 12px; color: var(--text2); margin-top: 3px; }
+  .ord .right { text-align: right; }
+  .ord .tot { font-weight: 800; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 10px; display: inline-block; margin-top: 4px; }
+
+  .di-batch { font-weight: 700; color: var(--gold); font-size: 13px; margin: 14px 0 6px; }
+  .di-item { padding: 9px 0; border-bottom: 1px solid var(--bg3); }
+  .di-item .l1 { display: flex; gap: 10px; }
+  .di-item .nm { flex: 1; font-size: 15px; }
+  .di-item .mods { font-size: 12px; color: var(--gold2); margin-top: 2px; }
+  .di-item .cmt { font-size: 12px; color: var(--text3); font-style: italic; }
+  .empty { text-align: center; color: var(--text3); padding: 40px 20px; }
+</style>
+</head>
+<body>
+<header class="app-header" id="hdr"></header>
+
+<div class="filters" id="filters"></div>
+<div class="list" id="list"><div class="empty">Chargement…</div></div>
+
+<div class="sheet-backdrop" id="backdrop">
+  <div class="sheet" id="sheet">
+    <div class="sheet-head"><h3 id="sheet-title"></h3><button class="x" onclick="closeSheet()">×</button></div>
+    <div class="sheet-body" id="sheet-body"></div>
+    <div class="sheet-foot" id="sheet-foot"></div>
+  </div>
+</div>
+
+<script src="/web/app.js"></script>
+<script>
+if (!SG.requireAuth()) { }
+document.getElementById('hdr').innerHTML = renderHeader('history');
+
+let ORDERS = [];
+let filter = 'all';
+const FILTERS = [['all', 'Toutes'], ['pending', 'En attente'], ['paid', 'Payées'], ['cancelled', 'Annulées']];
+
+function renderFilters() {
+  document.getElementById('filters').innerHTML = FILTERS.map(([k, l]) =>
+    `<button class="fchip ${filter === k ? 'on' : ''}" onclick="setFilter('${k}')">${l}</button>`).join('');
+}
+function setFilter(k) { filter = k; renderFilters(); renderList(); }
+
+async function load() {
+  renderFilters();
+  try {
+    const res = await SG.api('/orders/');
+    ORDERS = await res.json();
+    renderList();
+  } catch (e) {
+    document.getElementById('list').innerHTML = '<div class="empty">Erreur de chargement.</div>';
+  }
+}
+
+function orderMeta(o) {
+  const t = ORDER_TYPE_LABELS[o.order_type] || o.order_type || '';
+  if (o.order_type === 'eat_in') return `${t} · Table ${o.table_number || '?'}${o.covers ? ' · ' + o.covers + ' couv.' : ''}`;
+  if (o.order_type === 'take_away') return `${t}${o.customer_name ? ' · ' + o.customer_name : ''}${o.pickup_time ? ' · ' + o.pickup_time : ''}`;
+  return t;
+}
+
+function renderList() {
+  const list = document.getElementById('list');
+  let data = ORDERS.slice();
+  if (filter !== 'all') data = data.filter(o => o.status === filter);
+  if (!data.length) { list.innerHTML = '<div class="empty">Aucune commande.</div>'; return; }
+  list.innerHTML = data.map(o => {
+    const col = STATUS_COLORS[o.status] || '#aaa';
+    return `<div class="ord" onclick="openDetail(${o.id})">
+      <span class="id">#${o.id}</span>
+      <div class="mid">
+        <div>${SG.esc(orderMeta(o))}</div>
+        <div class="meta">${SG.fmtDate(o.created_at)}${o.created_by ? ' · ' + SG.esc(o.created_by.username) : ''}</div>
+      </div>
+      <div class="right">
+        <div class="tot">${SG.fmtPrice(o.total_price)}</div>
+        <span class="badge" style="background:${col}22;color:${col}">${STATUS_LABELS[o.status] || o.status}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function modsSummary(mods) {
+  if (!mods || !mods.length) return '';
+  const base = mods.filter(m => m.modification_type === 'base_change').map(m => 'BASE ' + (m.ingredient_name_snapshot || ''));
+  const add = mods.filter(m => m.modification_type === 'add').map(m => m.ingredient_name_snapshot || '');
+  const rem = mods.filter(m => m.modification_type === 'remove').map(m => m.ingredient_name_snapshot || '');
+  const parts = [...base];
+  if (add.length) parts.push('SUPP [' + add.join(', ') + ']');
+  if (rem.length) parts.push('SANS [' + rem.join(', ') + ']');
+  return parts.join(', ');
+}
+
+function openDetail(id) {
+  const o = ORDERS.find(x => x.id === id); if (!o) return;
+  const batches = {};
+  (o.items || []).forEach(it => { const b = it.batch || 1; (batches[b] = batches[b] || []).push(it); });
+  let body = `<div class="muted" style="margin-bottom:6px">${SG.esc(orderMeta(o))} · ${SG.fmtDate(o.created_at)}</div>`;
+  Object.keys(batches).sort((a, b) => a - b).forEach(bn => {
+    if (Object.keys(batches).length > 1) body += `<div class="di-batch">Bon ${bn}</div>`;
+    body += batches[bn].map(it => {
+      const opts = (it.selected_options || []).map(op => (op.option_name_snapshot || '') + ' ×' + (op.quantity || 1)).join(', ');
+      const ms = modsSummary(it.modifications);
+      const up = Number(it.unit_price) || 0;
+      const supp = (it.modifications || []).filter(m => m.modification_type === 'add').length;
+      const line = (up + supp) * (it.quantity || 1);
+      return `<div class="di-item"><div class="l1">
+        <div class="nm">${it.quantity || 1}× ${SG.esc(it.item_name_snapshot || '')} ${opts ? '<span class="muted">(' + SG.esc(opts) + ')</span>' : ''}</div>
+        <div>${SG.fmtPrice(line)}</div></div>
+        ${ms ? `<div class="mods">${SG.esc(ms)}</div>` : ''}
+        ${it.comment ? `<div class="cmt">${SG.esc(it.comment)}</div>` : ''}
+      </div>`;
+    }).join('');
+  });
+  body += `<div class="total-row" style="display:flex;padding-top:14px;font-size:19px;font-weight:800">Total <span style="margin-left:auto;color:var(--gold)">${SG.fmtPrice(o.total_price)}</span></div>`;
+
+  const btns = [];
+  if (o.status === 'pending') {
+    btns.push(`<button class="btn btn-green" onclick="location.href='/web/pos.html?add=${o.id}'">+ Ajouter des articles</button>`);
+  }
+  btns.push(`<button class="btn btn-ghost" onclick="reprintBons(${o.id})">Imprimer les bons</button>`);
+  if (o.status === 'pending') {
+    btns.push(`<button class="btn btn-gold" onclick="markPaid(${o.id})">Marquer payée</button>`);
+    btns.push(`<button class="btn btn-red" onclick="cancelOrder(${o.id})">Annuler la commande</button>`);
+  }
+  const foot = btns.map(b => `<div style="margin-bottom:10px">${b}</div>`).join('');
+  document.getElementById('sheet-title').textContent = 'Commande #' + o.id;
+  document.getElementById('sheet-body').innerHTML = body;
+  document.getElementById('sheet-foot').innerHTML = foot;
+  document.getElementById('backdrop').classList.add('open');
+}
+function closeSheet() { document.getElementById('backdrop').classList.remove('open'); }
+document.getElementById('backdrop').addEventListener('click', e => { if (e.target.id === 'backdrop') closeSheet(); });
+
+async function cancelOrder(id) {
+  if (!confirm('Annuler la commande #' + id + ' ? Un bon d’annulation sera imprimé.')) return;
+  try {
+    const res = await SG.api('/orders/' + id + '/status', { method: 'PUT', body: JSON.stringify({ status: 'cancelled' }) });
+    if (!res.ok) throw new Error();
+    closeSheet(); toast('Commande annulée'); load();
+  } catch (e) { alert('Impossible d’annuler.'); }
+}
+
+async function markPaid(id) {
+  if (!confirm('Marquer la commande #' + id + ' comme payée ?')) return;
+  try {
+    const res = await SG.api('/orders/' + id + '/status', { method: 'PUT', body: JSON.stringify({ status: 'paid' }) });
+    if (!res.ok) throw new Error();
+    closeSheet(); toast('Commande marquée payée'); load();
+  } catch (e) { alert('Impossible de changer le statut.'); }
+}
+
+function reprintBons(id) {
+  const o = ORDERS.find(x => x.id === id);
+  const batches = [...new Set((o.items || []).map(it => it.batch || 1))].sort((a, b) => a - b);
+  if (batches.length <= 1) { doReprint(id, batches); return; }  // un seul bon : direct
+  // Sélection des bons à imprimer
+  const body = `<div class="muted" style="margin-bottom:10px">Coche les bons à imprimer :</div>` +
+    batches.map(b => `<label class="chk-row"><input type="checkbox" class="batch-cb" data-b="${b}" checked><span>Bon ${b} (${(o.items || []).filter(it => (it.batch || 1) === b).length} article(s))</span></label>`).join('');
+  document.getElementById('sheet-title').textContent = 'Imprimer les bons — #' + id;
+  document.getElementById('sheet-body').innerHTML = body;
+  document.getElementById('sheet-foot').innerHTML =
+    `<button class="btn btn-ghost" style="margin-bottom:10px" onclick="openDetail(${id})">‹ Retour</button>
+     <button class="btn btn-gold" onclick="doReprintSelected(${id})">Imprimer la sélection</button>`;
+  document.getElementById('backdrop').classList.add('open');
+}
+
+function doReprintSelected(id) {
+  const sel = Array.from(document.querySelectorAll('.batch-cb')).filter(c => c.checked).map(c => Number(c.dataset.b));
+  if (!sel.length) { alert('Sélectionne au moins un bon.'); return; }
+  doReprint(id, sel);
+}
+
+async function doReprint(id, batches) {
+  try {
+    for (const b of batches) {
+      await SG.api('/orders/' + id + '/reprint?job_type=kitchen&batch=' + b, { method: 'POST' });
+    }
+    closeSheet();
+    toast(batches.length > 1 ? 'Bons envoyés à l’impression' : 'Bon envoyé à l’impression');
+  } catch (e) { alert('Impossible d’imprimer.'); }
+}
+
+function toast(txt) {
+  const t = document.createElement('div');
+  t.textContent = txt;
+  t.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);background:var(--green);color:#fff;padding:12px 18px;border-radius:10px;z-index:100;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.4)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 2400);
+}
+
+load();
+</script>
+</body>
+</html>

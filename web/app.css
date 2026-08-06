@@ -1,0 +1,106 @@
+/* ============================================
+   San Giorgio — Web mobile (POS + historique)
+   Palette charte : fond sombre, bordeaux CTA, doré, vert = valider
+   ============================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #1A1714; --bg2: #252220; --bg3: #2D2824; --line: #3A3530;
+  --gold: #D4A365; --gold2: #B88647;
+  --wine: #7A1E1C; --wine2: #963433;
+  --green: #2D6B45; --green2: #38835A;
+  --red: #9C2A24; --red2: #B83A34;
+  --text: #F5F1E6; --text2: #A09888; --text3: #6A6255;
+}
+html, body {
+  background: var(--bg); color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  height: 100%; overscroll-behavior: none;
+}
+body { display: flex; flex-direction: column; min-height: 100vh; }
+button { font-family: inherit; cursor: pointer; }
+
+/* Header */
+.app-header {
+  background: var(--bg2); border-bottom: 1px solid var(--line);
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 20;
+}
+.app-header .logo { font-weight: 800; letter-spacing: 2px; color: var(--gold); font-size: 15px; }
+.app-header .spacer { flex: 1; }
+.app-header .who { font-size: 12px; color: var(--text2); }
+.app-header .role-pill {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+  background: rgba(212,163,101,.15); color: var(--gold); text-transform: uppercase;
+}
+.hbtn {
+  background: none; border: 1px solid var(--line); color: var(--text2);
+  border-radius: 8px; padding: 7px 12px; font-size: 13px;
+}
+.hbtn:active { background: var(--bg3); }
+.hbtn.danger:active { color: var(--red2); border-color: var(--red); }
+.hbtn.back { font-size: 22px; line-height: 1; padding: 4px 13px; color: var(--gold); font-weight: 700; }
+
+/* Buttons */
+.btn { border: none; border-radius: 10px; padding: 14px 18px; font-size: 16px; font-weight: 700; letter-spacing: .5px; width: 100%; color: var(--text); }
+.btn:active { transform: translateY(1px); }
+.btn-wine { background: var(--wine); } .btn-wine:active { background: var(--wine2); }
+.btn-green { background: var(--green); } .btn-green:active { background: var(--green2); }
+.btn-red { background: var(--red); } .btn-red:active { background: var(--red2); }
+.btn-ghost { background: var(--bg3); color: var(--text2); }
+.btn-gold { background: var(--gold2); color: var(--bg); }
+.btn:disabled { background: #4A4540; color: #7A7570; }
+
+/* Inputs */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+input, select, textarea {
+  width: 100%; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 10px; color: var(--text); font-size: 16px; padding: 13px 14px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--gold2); }
+
+/* Utility */
+.muted { color: var(--text2); font-size: 13px; }
+.center { text-align: center; }
+.grow { flex: 1; }
+.hidden { display: none !important; }
+
+/* Toast / message */
+.msg { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 10px; display: none; }
+.msg.err { background: rgba(156,42,36,.25); color: #e88; display: block; }
+.msg.ok { background: rgba(45,107,69,.25); color: #7c9; display: block; }
+
+/* Bottom sheet */
+.sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 40;
+  display: none; align-items: flex-end;
+}
+.sheet-backdrop.open { display: flex; }
+.sheet {
+  background: var(--bg2); width: 100%; max-height: 88vh; border-radius: 18px 18px 0 0;
+  border-top: 1px solid var(--line); display: flex; flex-direction: column;
+  animation: slideup .18s ease;
+}
+@keyframes slideup { from { transform: translateY(30px); opacity:.6 } to { transform: none; opacity:1 } }
+.sheet-head { padding: 16px 18px 8px; display: flex; align-items: center; gap: 10px; }
+.sheet-head h3 { font-size: 17px; }
+.sheet-head .x { margin-left: auto; background: var(--bg3); border: none; color: var(--text2); width: 34px; height: 34px; border-radius: 50%; font-size: 18px; }
+.sheet-body { padding: 4px 18px; overflow-y: auto; }
+.sheet-foot { padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.sheet-section { font-size: 12px; font-weight: 700; color: var(--gold2); letter-spacing: .5px; margin: 14px 0 8px; text-transform: uppercase; }
+
+/* Chips / checks */
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--bg3);
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; font-size: 15px;
+  margin: 0 8px 8px 0;
+}
+.chip.on { border-color: var(--gold2); background: rgba(184,134,71,.15); color: var(--gold); }
+.chk-row { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--bg3); font-size: 15px; }
+.chk-row input { width: 22px; height: 22px; }
+
+/* Stepper */
+.stepper { display: inline-flex; align-items: center; gap: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stepper button { width: 40px; height: 40px; background: var(--bg3); border: none; color: var(--text); font-size: 20px; }
+.stepper button:active { background: var(--gold2); color: var(--bg); }
+.stepper .val { min-width: 40px; text-align: center; font-weight: 700; font-size: 16px; }
