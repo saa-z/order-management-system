@@ -49,21 +49,31 @@ def init_db():
             {"name": "San Giorgio", "price": Decimal("12.00"), "available": True, "category": "Pizzas"},
             {"name": "Orientale", "price": Decimal("11.00"), "available": True, "category": "Pizzas"},
             {"name": "Kebab", "price": Decimal("12.00"), "available": True, "category": "Pizzas"},
-            {"name": "Ingrédient supplémentaire", "price": Decimal("1.00"), "available": True, "category": "Pizzas"},
 
             # --- PANOZZOS ---
             {"name": "Panozzo Kebab", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
             {"name": "Panozzo Auvergnat", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
             {"name": "Panozzo Italien", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
             {"name": "Panozzo Végétarien", "price": Decimal("9.00"), "available": True, "category": "Panozzos"},
+            {
+                "name": "Boisson Menu",
+                "price": Decimal("1.50"),
+                "available": True,
+                "category": "Panozzos",
+                "options": [
+                    "Coca-Cola", "Coca 0", "Orangina", "Ice Tea",
+                    "Eau pétillante", "San Pellegrino",
+                    "Sirop Fraise", "Sirop Menthe", "Sirop Grenadine",
+                ]
+            },
 
             # --- SALADES ---
             {"name": "Salade César", "price": Decimal("12.00"), "available": True, "category": "Salades"},
             {"name": "Salade Chèvre chaud", "price": Decimal("12.00"), "available": True, "category": "Salades"},
             {"name": "Salade San Giorgio", "price": Decimal("13.00"), "available": True, "category": "Salades"},
+            {"name": "Salade Burrata", "price": Decimal("13.00"), "available": True, "category": "Salades"},
 
             # --- FORMULES & MENUS ---
-            {"name": "Menu : Panozzo + Boisson", "price": Decimal("10.50"), "available": True, "category": "Formules et Menus"},
             {
                 "name": "Menu Enfant (-10 ans) : Pizza Margherita/Pâtes + Dessert + Sirop au choix",
                 "price": Decimal("6.00"),

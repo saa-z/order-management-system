@@ -7,31 +7,31 @@
 <title>San Giorgio — Historique</title>
 <link rel="stylesheet" href="/web/app.css">
 <style>
-  .filters { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px; }
+  .filters { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; }
   .filters::-webkit-scrollbar { display: none; }
-  .fchip { flex: 0 0 auto; background: var(--bg2); border: 1px solid var(--line); color: var(--text2); border-radius: 20px; padding: 8px 14px; font-size: 13px; white-space: nowrap; }
+  .fchip { flex: 0 0 auto; background: var(--bg2); border: 1px solid var(--line); color: var(--text2); border-radius: 18px; padding: 7px 12px; font-size: 12px; white-space: nowrap; }
   .fchip.on { background: var(--gold2); color: var(--bg); border-color: var(--gold2); font-weight: 700; }
 
-  .list { flex: 1; overflow-y: auto; padding: 4px 12px 24px; }
+  .list { flex: 1; overflow-y: auto; padding: 4px 10px 20px; }
   .ord {
-    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
   }
   .ord:active { border-color: var(--gold2); }
-  .ord .id { font-weight: 800; color: var(--gold); font-size: 15px; }
+  .ord .id { font-weight: 800; color: var(--gold); font-size: 13px; }
   .ord .mid { flex: 1; }
-  .ord .meta { font-size: 12px; color: var(--text2); margin-top: 3px; }
+  .ord .meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
   .ord .right { text-align: right; }
-  .ord .tot { font-weight: 800; }
-  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 10px; display: inline-block; margin-top: 4px; }
+  .ord .tot { font-weight: 800; font-size: 13px; }
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 3px; }
 
-  .di-batch { font-weight: 700; color: var(--gold); font-size: 13px; margin: 14px 0 6px; }
-  .di-item { padding: 9px 0; border-bottom: 1px solid var(--bg3); }
-  .di-item .l1 { display: flex; gap: 10px; }
-  .di-item .nm { flex: 1; font-size: 15px; }
-  .di-item .mods { font-size: 12px; color: var(--gold2); margin-top: 2px; }
-  .di-item .cmt { font-size: 12px; color: var(--text3); font-style: italic; }
-  .empty { text-align: center; color: var(--text3); padding: 40px 20px; }
+  .di-batch { font-weight: 700; color: var(--gold); font-size: 12px; margin: 10px 0 4px; }
+  .di-item { padding: 7px 0; border-bottom: 1px solid var(--bg3); }
+  .di-item .l1 { display: flex; gap: 8px; }
+  .di-item .nm { flex: 1; font-size: 13px; }
+  .di-item .mods { font-size: 11px; color: var(--gold2); margin-top: 2px; }
+  .di-item .cmt { font-size: 11px; color: var(--text3); font-style: italic; }
+  .empty { text-align: center; color: var(--text3); padding: 30px 16px; }
 </style>
 </head>
 <body>
@@ -48,7 +48,7 @@
   </div>
 </div>
 
-<script src="/web/app.js"></script>
+<script src="/web/app.js?v=2"></script>
 <script>
 if (!SG.requireAuth()) { }
 document.getElementById('hdr').innerHTML = renderHeader('history');
@@ -117,7 +117,8 @@ function openDetail(id) {
   const o = ORDERS.find(x => x.id === id); if (!o) return;
   const batches = {};
   (o.items || []).forEach(it => { const b = it.batch || 1; (batches[b] = batches[b] || []).push(it); });
-  let body = `<div class="muted" style="margin-bottom:6px">${SG.esc(orderMeta(o))} · ${SG.fmtDate(o.created_at)}</div>`;
+  const serverName = (o.created_by && o.created_by.username) ? o.created_by.username : '';
+  let body = `<div class="muted" style="margin-bottom:6px">${SG.esc(orderMeta(o))} · ${SG.fmtDate(o.created_at)}${serverName ? ' · <b style="color:var(--gold)">' + SG.esc(serverName) + '</b>' : ''}</div>`;
   Object.keys(batches).sort((a, b) => a - b).forEach(bn => {
     if (Object.keys(batches).length > 1) body += `<div class="di-batch">Bon ${bn}</div>`;
     body += batches[bn].map(it => {

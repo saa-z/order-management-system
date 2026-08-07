@@ -7,12 +7,12 @@
 <title>San Giorgio — Connexion</title>
 <link rel="stylesheet" href="/web/app.css">
 <style>
-  .login-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 28px 22px; }
-  .brand { text-align: center; margin-bottom: 34px; }
-  .brand .name { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: var(--gold); }
-  .brand .sub { font-size: 12px; letter-spacing: 2px; color: var(--text2); margin-top: 6px; }
-  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
-  .card h2 { font-size: 15px; color: var(--text2); margin-bottom: 18px; font-weight: 600; }
+  .login-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 20px 18px; }
+  .brand { text-align: center; margin-bottom: 24px; }
+  .brand .name { font-size: 26px; font-weight: 800; letter-spacing: 4px; color: var(--gold); }
+  .brand .sub { font-size: 11px; letter-spacing: 2px; color: var(--text2); margin-top: 4px; }
+  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card h2 { font-size: 14px; color: var(--text2); margin-bottom: 14px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -35,7 +35,7 @@
     <div class="msg" id="msg"></div>
   </div>
 </div>
-<script src="/web/app.js"></script>
+<script src="/web/app.js?v=2"></script>
 <script>
   // Déjà connecté → menu
   if (SG.token() && SG.user()) location.href = '/web/menu.html';

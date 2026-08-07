@@ -7,19 +7,19 @@
 <title>San Giorgio — Menu</title>
 <link rel="stylesheet" href="/web/app.css">
 <style>
-  .menu-wrap { flex: 1; display: flex; flex-direction: column; padding: 22px 18px; gap: 16px; }
-  .menu-hello { margin: 6px 2px 4px; }
-  .menu-hello .h { font-size: 22px; font-weight: 800; }
-  .menu-hello .s { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .menu-wrap { flex: 1; display: flex; flex-direction: column; padding: 16px 14px; gap: 12px; }
+  .menu-hello { margin: 4px 2px 2px; }
+  .menu-hello .h { font-size: 18px; font-weight: 800; }
+  .menu-hello .s { font-size: 12px; color: var(--text2); margin-top: 2px; }
   .tile {
-    background: var(--bg2); border: 1px solid var(--line); border-radius: 18px;
-    padding: 26px 22px; display: flex; align-items: center; gap: 18px; text-decoration: none; color: var(--text);
+    background: var(--bg2); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 16px; display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--text);
   }
   .tile:active { border-color: var(--gold2); background: var(--bg3); }
-  .tile .ico { font-size: 40px; width: 60px; text-align: center; }
-  .tile .txt .t { font-size: 20px; font-weight: 700; }
-  .tile .txt .d { font-size: 13px; color: var(--text2); margin-top: 4px; }
-  .tile .arrow { margin-left: auto; color: var(--gold); font-size: 26px; }
+  .tile .ico { font-size: 30px; width: 44px; text-align: center; }
+  .tile .txt .t { font-size: 16px; font-weight: 700; }
+  .tile .txt .d { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .tile .arrow { margin-left: auto; color: var(--gold); font-size: 22px; }
   .tile-order { border-left: 4px solid var(--wine); }
   .tile-hist { border-left: 4px solid var(--gold2); }
 </style>
@@ -46,7 +46,7 @@
   </a>
 </div>
 
-<script src="/web/app.js"></script>
+<script src="/web/app.js?v=2"></script>
 <script>
   if (!SG.requireAuth()) { }
   document.getElementById('hdr').innerHTML = renderHeader('menu');

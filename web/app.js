@@ -40,16 +40,15 @@ function renderHeader(active) {
   const u = SG.user() || {};
   const roleLabel = u.role === 'admin' ? 'Admin' : 'Serveur';
   let nav = '';
-  if (active === 'pos') nav = '<a class="hbtn" href="/web/history.html">Historique</a>';
-  else if (active === 'history') nav = '<a class="hbtn" href="/web/pos.html">Commande</a>';
+  if (active === 'pos') nav = '<a class="hbtn" href="/web/history.html">Hist.</a>';
+  else if (active === 'history') nav = '<a class="hbtn" href="/web/pos.html">+Cmd</a>';
   const back = (active === 'pos' || active === 'history')
     ? '<a class="hbtn back" id="btn-back" href="/web/menu.html" aria-label="Retour">‹</a>' : '';
   return `
     ${back}
-    <a class="logo" href="/web/menu.html" style="text-decoration:none">SAN GIORGIO</a>
-    <span class="role-pill">${roleLabel}</span>
+    <a class="logo" href="/web/menu.html" style="text-decoration:none">SG</a>
+    <span class="role-pill">${SG.esc(u.username || '')} · ${roleLabel}</span>
     <span class="spacer"></span>
-    <span class="who">${SG.esc(u.username || '')}</span>
     ${nav}
     <button class="hbtn danger" onclick="SG.logout()">Quitter</button>`;
 }

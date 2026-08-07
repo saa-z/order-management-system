@@ -219,3 +219,4 @@ class PrintJob(Base):
     status: Mapped[str] = mapped_column(String, default="pending", index=True)  # pending / done
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     printed_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+
